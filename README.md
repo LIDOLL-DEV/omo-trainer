@@ -27,9 +27,10 @@ New participants can choose **Settings & data → Create account**, or register 
 
 The PWA now includes the **Potty chart** from LiDOLL QUEST. It can be linked to the same Chrysalis participant file as observations, with automatic linking on sign-in, offline edits and version-conflict choices. See [Growth Chart setup and behavior](GROWTH_CHART_GUIDE.md).
 
-On mobile (up to 680px wide), the bottom bar switches between **Record liquids**,
-**Record wetting**, **Roll**, and **Pattern analysis**. Unsaved form values remain
-when switching. The links support browser Back/Forward and offline reopening.
+On mobile (up to 680px wide), the bottom bar holds **Record observation**, **Roll**,
+**Star chart**, **Pattern analysis**, **Games** and **Messaging**. Record observation
+gathers the liquids, wetting and diaper-change forms in one place. Unsaved form values
+remain when switching. The links support browser Back/Forward and offline reopening.
 
 The observation intake field can switch between **mL** and **US fl oz**. The
 choice stays on this device; switching converts the draft amount, and saving

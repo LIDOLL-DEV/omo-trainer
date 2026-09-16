@@ -1563,6 +1563,8 @@ dialog .primary {
     color: var(--muted);
     font: 11px/1.25 "Segoe UI", system-ui, sans-serif;
     text-align: center;
+    overflow-wrap: anywhere; /* Longer labels such as "Record observation" wrap inside their column instead of widening the page at 320px. */
+    hyphens: auto;
   }
   .mobile-actions a[aria-current="page"] {
     color: var(--pink);

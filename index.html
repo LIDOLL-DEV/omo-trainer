@@ -85,7 +85,7 @@
             </form>
           </section>
             <div class="wetting-panels">
-            <section class="card wetting-card" data-mobile-panel="wetting" aria-labelledby="wetting-title"><div class="card-heading"><div><h2 id="wetting-title" tabindex="-1">Record a wetting</h2><p>One event. One classification. Independent of rolls.</p></div><span class="pill lavender">FORM 02</span></div>
+            <section class="card wetting-card" id="wetting" data-mobile-panel="observation" aria-labelledby="wetting-title"><div class="card-heading"><div><h2 id="wetting-title" tabindex="-1">Record a wetting</h2><p>One event. One classification. Independent of rolls.</p></div><span class="pill lavender">FORM 02</span></div>
               <form id="wetting-form"><label for="wetting-time">Date &amp; time</label><input id="wetting-time" name="occurredAt" type="datetime-local" required>
                 <label for="wetting-category">Classification</label><select id="wetting-category" name="category" required><option value="" disabled selected>Choose a classification</option><option value="forced">Forced (F)</option><option value="semi-forced">Semi-Forced (SF)</option><option value="voluntary">Voluntary (V)</option><option value="semi-involuntary">Semi-involuntary (SI)</option><option value="involuntary">Involuntary (I)</option><option value="bedwetting">Bedwetting</option><option value="used-the-potty">Used the potty</option></select>
                 <div><label for="wetting-position">Position</label><select id="wetting-position" name="position"><option value="standing">Standing</option><option value="sitting" selected>Sitting</option><option value="laying-down">Laying down</option></select></div>
@@ -93,7 +93,7 @@
                 <p class="field-help">Record each actual wetting once, including events without a roll. Roll snapshots and their cumulative wetting counts do not add classified events.</p><button class="button primary" type="submit">Save wetting</button>
               </form>
             </section>
-            <section class="card diaper-change-card" data-mobile-panel="change" aria-labelledby="diaper-change-title">
+            <section class="card diaper-change-card" id="change" data-mobile-panel="observation" aria-labelledby="diaper-change-title">
               <div class="card-heading"><div><h2 id="diaper-change-title" tabindex="-1">Record a diaper change</h2><p>One completed diaper. Its final wetting count.</p></div><span class="pill lavender">FORM 03</span></div>
               <p id="diaper-change-summary" class="field-help" role="status"></p>
               <form id="diaper-change-form">
@@ -330,11 +330,11 @@
     </main>
   </div>
   <nav class="mobile-actions" aria-label="Quick actions">
-    <a href="#observation" data-action="observation"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg><span>Record<br>liquids</span></a>
-    <a href="#wetting" data-action="wetting"><svg class="icon" aria-hidden="true"><use href="#i-drop"/></svg><span>Record<br>wetting</span></a>
-    <a href="#change" data-action="change"><svg class="icon" aria-hidden="true"><use href="#i-change"/></svg><span>Record<br>change</span></a>
+    <a href="#observation" data-action="observation"><svg class="icon" aria-hidden="true"><use href="#i-drop"/></svg><span>Record<br>observation</span></a>
     <a href="#roll" data-action="roll"><svg class="icon" aria-hidden="true"><use href="#i-dice"/></svg><span>Roll</span></a>
+    <a href="#potty-chart" data-page="potty-chart"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg><span>Star<br>chart</span></a>
     <a href="#analysis" data-action="analysis"><svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg><span>Pattern<br>analysis</span></a>
+    <a href="#games" data-page="games"><svg class="icon" aria-hidden="true"><use href="#i-gamepad"/></svg><span>Games</span></a>
     <a href="#messages" id="main-messages" data-message-shortcut><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4V4Z"/></svg><span>Messaging</span><span class="message-badge" data-message-badge hidden></span></a>
   </nav>
   <a href="./admin/" class="button small secondary admin-shortcut" id="admin-nav" hidden><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg><span>Admin console</span></a>

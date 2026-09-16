@@ -103,13 +103,14 @@ and layout at 320px. Saved records and record editing continue to use whole mL.
 
 ## Mobile quick actions
 
-`tests/training-browser.mjs` checks the bottom bar at 320/390/680px, all five
-panels, unsaved form retention, Back/Forward, return from Settings, offline
+`tests/training-browser.mjs` checks the bottom bar at 320/390/680px, all three
+panel destinations, unsaved form retention, Back/Forward, return from Settings, offline
 reopening, touch targets, bottom clearance and the unchanged desktop dashboard.
 On a real phone, also check the home-indicator safe area and form scrolling with
 the keyboard open. The bar switches panels without saving records or rolling.
 
-The sixth shortcut opens Messaging after Pattern analysis.
+The bar order is Record observation, Roll, Star chart, Pattern analysis, Games, Messaging;
+`tests/message-badge-browser.mjs` asserts that exact href order.
 `tests/message-badge-browser.mjs` checks the main and Social unread badges,
 15-second polling, read clearing, stored conversation links, both themes and
 sign-out cleanup. `tests/message-notifications.test.mjs` checks recipient-only

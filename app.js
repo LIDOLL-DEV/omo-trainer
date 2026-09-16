@@ -524,7 +524,7 @@ function navigate() { // Implements accessible, bookmarkable pages without requi
   document.querySelectorAll('[data-social-page]').forEach(link=>{if(link.dataset.socialPage===page)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');});
   if(page==='friends')$('#social-friends').setAttribute('aria-current','page');else $('#social-friends').removeAttribute('aria-current');
   positionSocialNavigation();
-  const action = ['observation', 'wetting', 'change', 'roll', 'analysis'].includes(requested) ? requested : 'observation';
+  const action = ['observation', 'roll', 'analysis'].includes(requested) ? requested : 'observation'; // The liquids, wetting and change forms now share the single observation destination; #wetting and #change stay as in-page anchors within it.
   document.querySelectorAll('[data-mobile-panel]').forEach(panel => {
     panel.dataset.active = String(panel.dataset.mobilePanel === action); // CSS switches mobile panels without clearing their forms or hiding desktop cards.
   });

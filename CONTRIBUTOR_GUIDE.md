@@ -70,10 +70,18 @@ Use `scripts/import-growth-chart.mjs <source-folder>` to refresh public assets.
 Both charts use the existing OIDC session and participant ID; keep the
 `growth-chart` API session-owned, CSRF-protected, versioned and uncached.
 The browser chart and its retry/ownership metadata share one atomic save.
-Mobile quick actions use `#observation`, `#wetting`, `#change`, `#roll`, and `#analysis`
-inside Overview, followed by `#messages` in Social. Keep the existing forms mounted so switching preserves drafts;
-CSS limits single-panel display to 680px and below. The fixed bar and toast spacing
-include the phone safe area. Desktop retains all dashboard cards.
+Mobile quick actions are, in order: `#observation`, `#roll`, `#potty-chart`,
+`#analysis`, `#games`, and `#messages`. Only `#observation`, `#roll` and `#analysis` are
+panel destinations inside Overview; `#potty-chart`, `#games` and `#messages` are whole
+pages and use `data-page` rather than `data-action`, so `navigate()` marks them current
+through the same page loop as the sidebar. The liquids, wetting and diaper-change cards
+all carry `data-mobile-panel="observation"` and appear together under one Record
+observation destination; the wetting and change cards keep `id="wetting"` and
+`id="change"` so in-page links still jump straight to them. Keep the existing forms
+mounted so switching preserves drafts; CSS limits single-panel display to 680px and
+below. The fixed bar and toast spacing include the phone safe area. Bar labels use
+`overflow-wrap: anywhere` so two-word labels never widen the page at 320px. Desktop
+retains all dashboard cards.
 
 Sign-in automatically links and uploads a guest chart, or restores the saved
 chart on a fresh device. Conflicting first-link content requires a durable

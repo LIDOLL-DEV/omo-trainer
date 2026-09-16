@@ -48,7 +48,8 @@ During a server update, offline check-ins remain on the device and retry afterwa
 
 ## Mobile quick actions
 
-- [ ] Switch between Record liquids, Record wetting, Roll and Pattern analysis using the bottom bar.
+- [ ] Switch between Record observation, Roll, Star chart, Pattern analysis, Games and Messaging using the bottom bar.
+- [ ] Confirm Record observation shows the liquids, wetting and diaper-change forms together.
 - [ ] Enter a draft, switch away and return; confirm the form retains its values.
 - [ ] Verify Back/Forward, offline reopening, and returning from Settings.
 - [ ] Check form buttons and notifications remain reachable above the bar and phone home indicator.
@@ -66,7 +67,7 @@ During a server update, offline check-ins remain on the device and retry afterwa
 - [ ] Clear chart & reset rows, sync, and confirm cleared stars stay cleared.
 - [ ] Sign out & clear this browser chart only removes this chart's local copy.
 
-On mobile, use Record change in the bottom bar to save a completed diaper and its final wetting count. Switching tabs preserves your unsaved form.
+On mobile, open Record observation in the bottom bar and scroll to the diaper-change form to save a completed diaper and its final wetting count. Switching tabs preserves your unsaved form.
 
 Potty chart is a native Little Log view at #potty-chart. Navigation keeps the same document and preserves drafts; the app header shows chart sync status on this route. Existing ldq-growth-chart-v2 saves are reused. Old chart URLs and the PWA shortcut lead to the integrated view, and OAuth returns there. Run node scripts/embed-growth-chart.mjs after editing bundled chart markup/styles; the source importer also runs it. Commit index.html and potty_chart/embedded.css with the matching chart scripts and worker. Static deployments must include the updated nginx chart redirects.
 

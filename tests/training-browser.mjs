@@ -135,17 +135,16 @@ try {
   await page.screenshot({ path: resolve('artifacts/protocol-desktop.png'), fullPage: true });
   await page.setViewport({ width: 390, height: 844 });
 
-  const actions = ['observation', 'wetting', 'change', 'roll', 'analysis'];
+  const actions = ['observation', 'roll', 'analysis']; // The liquids, wetting and change forms now share one observation destination.
   const visiblePanels = () => page.$$eval('[data-mobile-panel]', panels => [...new Set(panels.filter(panel => panel.getClientRects().length).map(panel => panel.dataset.mobilePanel))]); // The analysis destination contains both the prediction and charts cards.
   const selectAction = async action => { // Use the fixed bar exactly as a phone visitor would.
     await page.click('.mobile-actions [data-action="' + action + '"]');
     await page.waitForFunction(value => document.querySelector('.mobile-actions [aria-current="page"]')?.dataset.action === value, {}, action);
     await page.evaluate(() => new Promise(resolveFrame => requestAnimationFrame(() => requestAnimationFrame(resolveFrame)))); // Let destination focus and scrolling finish before layout assertions.
   };
+  await selectAction('observation');
   await fill(page, '#liquids', '321');
-  await selectAction('wetting');
-  await fill(page, '#wetting-category', 'voluntary');
-  await selectAction('change');
+  await fill(page, '#wetting-category', 'voluntary'); // All three record forms are reachable without leaving the observation destination.
   await fill(page, '#diaper-change-wettings', '7');
   await selectAction('roll');
   await page.focus('#roll-desperation'); await page.keyboard.press('End');
@@ -162,34 +161,32 @@ try {
   }
   await selectAction('roll');
   assert.equal(await page.$eval('#roll-desperation',input=>input.getAttribute('aria-valuetext')),'Crisis','Navigation preserves desperation draft');
-  await selectAction('change');
-  assert.equal(await page.$eval('#diaper-change-wettings', input => input.value), '7', 'Switching keeps the change draft');
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'diaper-change-title');
   await selectAction('observation');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'log-title'); // The merged destination announces itself at the first of its three forms.
   assert.equal(await page.$eval('#liquids', input => input.value), '321', 'Switching keeps the observation draft');
-  await selectAction('wetting');
   assert.equal(await page.$eval('#wetting-category', input => input.value), 'voluntary', 'Switching keeps the wetting draft');
-  await page.goBack(); await page.waitForFunction(() => location.hash === '#observation');
+  assert.equal(await page.$eval('#diaper-change-wettings', input => input.value), '7', 'Switching keeps the change draft');
+  await page.goBack(); await page.waitForFunction(() => location.hash === '#roll');
+  assert.deepEqual(await visiblePanels(), ['roll']);
+  await page.goForward(); await page.waitForFunction(() => location.hash === '#observation');
   assert.deepEqual(await visiblePanels(), ['observation']);
-  await page.goForward(); await page.waitForFunction(() => location.hash === '#wetting');
-  assert.deepEqual(await visiblePanels(), ['wetting']);
   assert.equal((await saved(page)).entries.length, entriesBeforeNavigation, 'Navigation must never save an observation, wetting or roll');
   await navigateMenu(page,'[data-page="settings"]');
   await page.waitForFunction(() => !document.querySelector('#page-settings').hidden);
   assert.equal(await page.$('.mobile-actions [aria-current]'), null);
-  await selectAction('change');
+  await selectAction('roll');
   await page.setOfflineMode(true);
   await page.reload({ waitUntil: 'networkidle0' });
-  assert.deepEqual(await visiblePanels(), ['change'], 'Offline reopening retains the selected action');
+  assert.deepEqual(await visiblePanels(), ['roll'], 'Offline reopening retains the selected action');
   await page.setOfflineMode(false);
   await page.setViewport({ width: 1024, height: 1000 });
-  assert.deepEqual(await visiblePanels(), actions, 'Desktop keeps all five dashboard cards');
+  assert.deepEqual(await visiblePanels(), actions, 'Desktop keeps every dashboard card');
   assert.equal(await page.$eval('.mobile-actions', bar => bar.getClientRects().length), 0);
   await page.setViewport({ width: 390, height: 844 });
-  await selectAction('wetting');
+  await selectAction('observation');
   await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
   assert.equal(await page.evaluate(() => document.querySelector('footer').getBoundingClientRect().bottom <= document.querySelector('.mobile-actions').getBoundingClientRect().top), true, 'The bar must leave the end of the page reachable');
-  await selectAction('wetting'); // Tapping the current action returns to its heading.
+  await selectAction('observation'); // Tapping the current action returns to its heading.
 
   await page.screenshot({ path: resolve('artifacts/protocol-mobile.png'), fullPage: true });
 
