@@ -153,8 +153,13 @@ export function createSocial(db,friends,{now=Date.now,activity}={}) {
  function deleteMessage(owner,id){requireUser(owner);const row=db.prepare('SELECT friendship_id FROM friend_messages WHERE id=? AND sender=?').get(key(id),owner);if(!row)fail(404,'Message not found.');db.prepare("UPDATE friend_messages SET body='',deleted=COALESCE(deleted,?) WHERE id=? AND sender=?").run(now(),id,owner);return {removed:true};}
  function serializePost(viewer,{owner,label,...post}) {
   const {request_id,request_hash,deleted,...safe}=post;
-  return {...safe,author:{id:owner,label,...avatarInfo(owner)},pictures:db.prepare('SELECT id,alt,width,height FROM social_pictures WHERE post_id=? ORDER BY position').all(post.id),...counts(viewer,post.id)};
+  return {...safe,author:{id:owner,label,...avatarInfo(owner)},record:recordInfo(post.id),pictures:db.prepare('SELECT id,alt,width,height FROM social_pictures WHERE post_id=? ORDER BY position').all(post.id),...counts(viewer,post.id)};
  } // Never expose write receipts; ordinary reads and moderation share the same safe post representation.
+ function recordInfo(postId){
+  const row=db.prepare("SELECT json_extract(e.payload_json,'$.kind') AS kind,json_extract(e.payload_json,'$.category') AS category,json_extract(e.payload_json,'$.liquidsMl') AS liquidsMl,json_extract(e.payload_json,'$.wettingsCount') AS wettingsCount,json_extract(e.payload_json,'$.occurredAt') AS occurredAt FROM social_record_posts r JOIN entries e ON e.participant_id=r.owner AND e.id=r.entry_id WHERE r.post_id=?").get(postId);
+  if(!row||!['wetting','diaper-change','observation'].includes(row.kind))return null; // Manual posts (and anything unexpected) render as normal posts.
+  return {kind:row.kind,...(row.kind==='wetting'?{category:row.category}:{}),...(row.kind==='observation'?{liquidsMl:row.liquidsMl}:{}),...(row.kind==='diaper-change'?{wettingsCount:row.wettingsCount}:{}),occurredAt:row.occurredAt};
+ } // Automatic record posts expose only what their summary text already shares: type, category, amount/count and recorded time.
  function counts(owner,id){return {likes:db.prepare('SELECT COUNT(*) AS n FROM social_likes l WHERE post_id=? AND NOT EXISTS(SELECT 1 FROM participant_access a WHERE a.participant_id=l.owner AND a.disabled=1)').get(id).n,liked:Boolean(db.prepare('SELECT 1 FROM social_likes WHERE post_id=? AND owner=?').get(id,owner)),comments:db.prepare('SELECT COUNT(*) AS n FROM social_comments c WHERE post_id=? AND deleted IS NULL AND NOT EXISTS(SELECT 1 FROM participant_access a WHERE a.participant_id=c.owner AND a.disabled=1)').get(id).n};}
  function post(owner,id){return serializePost(owner,postAccess(owner,id));}
  function withdrawPost(id,commentId){if(!activity)return;for(const row of db.prepare('SELECT id FROM activity_notifications WHERE post_id=?'+(commentId?' AND comment_id=?':'')).all(id,...(commentId?[commentId]:[])))activity.withdraw(row.id);}

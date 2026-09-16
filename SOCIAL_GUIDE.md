@@ -92,6 +92,28 @@ count; water/liquid logs include the intake amount in mL. Rolls, position and di
 records are not backfilled; offline and backdated records first synced while
 enabled do post. Administrator imports never create new posts.
 
+In the feed and on profiles, automatic record posts look different from
+status updates. Instead of a text body, each one shows a compact activity line
+with an icon and a coloured left edge, for example:
+
+| Record | Shown as |
+| --- | --- |
+| Water/liquid log | 🥤 **Alice** drank 250 mL of water |
+| Diaper change | 🧷 **Alice** changed their diaper after 2 wettings |
+| Voluntary wetting | 💧 **Alice** used their diaper! |
+| Forced / semi-forced | 💧 **Alice** was made to / was nudged into using their diaper! |
+| Semi-involuntary | 💧 **Alice** almost held it... and used their diaper! |
+| Involuntary accident | 💧 **Alice** had an accident in their diaper! |
+| Bedwetting | 💧 **Alice** wet the bed! |
+| Used the potty | 🚽 **Alice** used the potty :( |
+
+Below it are the recorded time and an **AUTO-LOGGED · 5 minutes ago** label.
+These posts keep likes, comments and the Options menu. The API adds a `record`
+field to each post: `null` for manual posts, or `{kind, category?, liquidsMl?,
+wettingsCount?, occurredAt}` for automatic ones. It contains only what the
+summary text already shares (never position or diaper numbers). The stored
+`body` summary is unchanged, so older app versions still show it as text.
+
 Private posts are visible to you and accepted friends. Public posts are visible
 to all signed-in members. Changing the audience or switching sharing off affects
 future posts only. Correcting a shared record updates its post; deleting the
@@ -252,7 +274,7 @@ Threaded comments add `parent_id` and `root_id` columns to `social_comments`
 (added automatically at startup; existing comments become top-level threads)
 and a new `social_comment_likes` table. Deploy `server/social.mjs`,
 `server/activity.mjs`, `server/api.mjs`, `lib/social.js`, `styles.css` and
-`sw.js` (cache `little-log-v103-threaded-comments`) together. Back up
+`sw.js` (cache `little-log-v104-record-post-lines`) together. Back up
 `little-log.sqlite` first, as always.
 
 Deploy the backend, HTML, styles, `lib/social.js`, service worker and updated npm

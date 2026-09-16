@@ -134,6 +134,9 @@ Use **Run and share with MommyBot** to request an on-demand report for the bot's
   deletes your conversation for both people. See [SOCIAL_GUIDE.md](SOCIAL_GUIDE.md).
 
 
+- Automatic bathroom/water posts appear as short activity lines (for example
+  "Alice drank 250 mL of water" or "Alice used the potty :(") marked
+  **AUTO-LOGGED**, so they're easy to tell apart from real updates.
 - Like posts and comments, and open Comments to join the conversation. Choose
   **Reply** under a comment to answer it in a thread.
 - Delete your own comments with **Delete**. You can't delete other people's

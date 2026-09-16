@@ -20,6 +20,9 @@ test('record sharing starts off, publishes only new eligible records, and retrie
   const batch=[change(wet('accident')),change(wet('potty','used-the-potty')),change(wet('bed','bedwetting')),change({id:'change',kind:'diaper-change',occurredAt:'2026-09-15T12:10:00-07:00',diaperNumber:7,wettingsCount:3}),change({id:'liquids',kind:'observation',occurredAt:'2026-09-15T12:00:00-07:00',liquidsMl:200,liquidsMode:'interval',diaperNumber:7}),change({id:'roll',kind:'roll',occurredAt:'2026-09-15T12:00:00-07:00',rolledAt:'2026-09-15T12:00:00-07:00',rolledResult:'pee',result:'pee',source:'random',probability:50})];
   db.sync(a.id,batch);db.sync(a.id,batch);const posts=db.social.feed(b.id).items;assert.equal(posts.length,5);assert.equal(db.social.feed(c.id,{audience:'public'}).items.length,0);assert.match(posts.map(p=>p.body).join('\n'),/Involuntary accident/);assert.match(posts.map(p=>p.body).join('\n'),/Used the potty/);assert.match(posts.map(p=>p.body).join('\n'),/3 wettings/);assert.match(posts.map(p=>p.body).join('\n'),/Liquids logged.*200 mL/);assert.ok(posts.every(p=>!p.body.includes('sitting')&&!p.body.includes('diaperNumber')&&p.audience==='friends'));
   for(const p of posts)assert.throws(()=>db.social.post(c.id,p.id),e=>e.status===404);assert.equal(db.activity.list(b.id).items.filter(i=>i.kind==='friend-post').length,5);
+  const records=Object.fromEntries(posts.map(p=>[p.record.kind==='wetting'?p.record.category:p.record.kind,p.record])); // Automatic posts carry typed record details for the activity-line layout.
+  assert.deepEqual(records.observation,{kind:'observation',liquidsMl:200,occurredAt:'2026-09-15T12:00:00-07:00'});assert.deepEqual(records['diaper-change'],{kind:'diaper-change',wettingsCount:3,occurredAt:'2026-09-15T12:10:00-07:00'});
+  assert.deepEqual(records['used-the-potty'],{kind:'wetting',category:'used-the-potty',occurredAt:'2026-09-15T12:00:00-07:00'});assert.ok(posts.every(p=>!('position' in p.record)&&!('diaperNumber' in p.record)),'Private record fields stay private');
  }finally{db.close();}
 });
 test('audience and opt-out affect future posts; edits preserve audience, deletes withdraw and cannot resurrect',()=>{
@@ -74,4 +77,10 @@ test('record settings HTTP API requires session and CSRF and never accepts a sup
   const body=JSON.stringify({enabled:true,audience:'public',version:0,owner:b.id});assert.equal((await fetch(url,{method:'POST',headers:{...headers,'X-CSRF-Token':'bad'},body})).status,403);assert.equal((await fetch(url,{method:'POST',headers,body})).status,200);assert.equal(db.social.recordPreferences(a.id).enabled,true);assert.equal(db.social.recordPreferences(b.id).enabled,false);
   db.admin.bootstrap(b.id);const user=db.admin.users(b.id).find(u=>u.id===a.id);db.admin.updateUser(b.id,{action:'update',id:a.id,role:'participant',disabled:true,version:user.version});assert.ok([401,403].includes((await fetch(url,{headers})).status));
  }finally{await new Promise(r=>server.close(r));db.close();}
+});
+test('manual status posts never carry automatic record details',async()=>{
+ const {db,a,b,prefs}=fixture();try{
+  prefs(true);db.sync(a.id,[change(wet('auto'))]);const manual=await db.social.publish(a.id,{requestId:'manual',body:'Just a normal update',audience:'friends'});
+  assert.equal(db.social.post(b.id,manual.id).record,null);assert.equal(db.social.feed(b.id).items.filter(p=>p.record).length,1);assert.equal(db.social.memberProfile(b.id,a.id).items.filter(p=>p.record).length,1);
+ }finally{db.close();}
 });

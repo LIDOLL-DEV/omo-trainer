@@ -271,6 +271,10 @@ post deletion. Run `node tests/comment-threads-browser.mjs` (needs
 nested reply boxes, comment likes, the missing Delete on other members'
 comments, removed-comment placeholders, activity alerts and 320/390/1024px
 layouts in both themes. Screenshots land in `artifacts/`.
+`tests/record-sharing.test.mjs` also checks the `record` details on automatic
+posts (and `null` on manual ones). Run `node tests/record-posts-browser.mjs` to
+check the activity-line layout for water, diaper change, accident, potty and
+diaper-use posts next to a normal update, in both themes at 320/390/1024px.
 `tests/notifications-browser.mjs` verifies all three default-on social settings
 and opt-outs across reloads/devices. Push tests use mocked transport; production
 Web Push delivery still requires a subscribed device.
