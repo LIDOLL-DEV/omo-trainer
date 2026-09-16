@@ -88,7 +88,7 @@ export const server = http.createServer(requestBoundary(async (request, response
   } catch { response.writeHead(503); response.end('App asset unavailable'); }
 }));
 
-const rewardTimer=setInterval(()=>database.economy.tryFlush(),30000);rewardTimer.unref(); // Resume reward delivery even without another record submission.
+const rewardTimer=setInterval(()=>{database.economy.tryFlush();database.social.reconcileStickers();},30000);rewardTimer.unref(); // Resume reward delivery even without another record submission.
 server.on('close', () => {stopAnalysisWorker();clearInterval(rewardTimer);database.close();}); // Flushes and closes the persistent connection during controlled shutdowns and tests.
 server.requestTimeout = 15000;
 server.headersTimeout = 10000;

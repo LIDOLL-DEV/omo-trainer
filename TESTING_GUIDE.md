@@ -111,6 +111,16 @@ the keyboard open. The bar switches panels without saving records or rolling.
 
 The bar order is Record observation, Roll, Star chart, Pattern analysis, Games, Messaging;
 `tests/message-badge-browser.mjs` asserts that exact href order.
+`tests/sticker-gifts.test.mjs` (in `npm test`) checks sticker comments, replies
+and messages: who receives the sticker, retry safety, no self-gifts, empty
+inventory, optional text, friendship checks, gifts surviving message removal,
+immediate returns after a failed save and the reconciler's settle/return/kept
+paths. With `PUPPETEER_MODULE` and `CHROME_PATH` set, run
+`node tests/sticker-gifts-browser.mjs` to click through the real picker: hidden
+on your own post, counts, a sticker-only comment, a text + sticker message, the
+empty-inventory notice and the recipient's view. Screenshots are saved under
+`artifacts/sticker-gifts-browser-*`.
+
 `tests/message-badge-browser.mjs` checks the main and Social unread badges,
 15-second polling, read clearing, stored conversation links, both themes and
 sign-out cleanup. `tests/message-notifications.test.mjs` checks recipient-only

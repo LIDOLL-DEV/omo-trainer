@@ -1959,6 +1959,19 @@ html.photo-viewing { overflow:hidden; }
 .comment-replies { margin:8px 0 0 13px;padding-left:12px;border-left:2px solid var(--border); }
 .comment-replies .social-comment { padding:8px 0;border-bottom:0; }
 .comment-replies .comment-replies .comment-replies .comment-replies { margin-left:0;padding-left:0;border-left:0; } /* stop indenting past three levels */
+/* Sticker gifts in comments and messages: picker grid, chosen chip and the posted sticker. */
+.sticker-picker { margin:6px 0; }
+.sticker-choices { display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;margin-top:8px;max-height:240px;overflow-y:auto; }
+.sticker-choice { display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px;background:var(--page);color:var(--ink);border:1px solid var(--border);border-radius:10px;cursor:pointer;font:inherit; }
+.sticker-choice:hover,.sticker-choice:focus-visible { border-color:var(--pink); }
+.sticker-choice .social-sticker img { width:64px;height:48px; }
+.sticker-chosen { display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px; }
+.sticker-chosen .social-sticker img { width:64px;height:48px; }
+.social-sticker { margin:6px 0;display:inline-flex;flex-direction:column;align-items:center;gap:2px; }
+.social-sticker img { width:120px;height:90px;object-fit:contain; }
+.social-sticker figcaption { font-size:11px;color:var(--muted); }
+.social-comment > .social-sticker { margin-left:38px; } /* line up with the comment text */
+@media (max-width:680px) { .social-comment > .social-sticker { margin-left:0; } }
 .comment-removed { margin:4px 0;color:var(--muted);font-size:12px;font-style:italic; }
 .reply-form { margin-top:8px; }
 .social-comments .reply-form textarea { min-height:60px; }

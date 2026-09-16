@@ -109,6 +109,11 @@ export function createRewardBridge(science,filename,options={}) { // A durable o
       let economy;try {economy=open();}catch {throw Object.assign(new Error('The wallet is temporarily unavailable.'),{status:503});}
       return economy.coins[method](...args);
     },
+    gifts(method,...args) { // Sticker gifts in comments/messages move inventory inside market.sqlite only.
+      if(method==='give'||method==='owned')tryFlush(); // Deliver freshly earned stickers before they are listed or sent.
+      let economy;try {economy=open();}catch {throw Object.assign(new Error('Stickers are temporarily unavailable. Try again shortly.'),{status:503});}
+      return economy.gifts[method](...args);
+    },
     backup(destination) {open();return backup(market,destination);},
     close() {market?.close();market=null;store=null;},
   };

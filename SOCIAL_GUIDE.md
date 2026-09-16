@@ -163,7 +163,33 @@ member on the same item does not duplicate the queue; reporting is limited to
 20 new reports per hour. Reporting a private message exposes that message to
 administrators, not the rest of the conversation.
 
-## Activity and social push notifications
+## Sticker gifts in comments and messages
+
+Your earned stickers can be sent as gifts. Choose **🎁 Add sticker** under a
+comment box, reply box or message box, then tap a sticker from your collection.
+The picker shows only stickers you have available (stickers reserved in open
+market listings are not offered). Text is optional once a sticker is attached;
+**Remove sticker** takes it off again. Sending the comment, reply or message
+moves **one** of that sticker from your collection into the other person's
+collection:
+
+| Where you send it | Who receives the sticker |
+| --- | --- |
+| Top-level comment on a post | The post's author |
+| Reply to a comment | The author of the comment you replied to |
+| Private message | The friend you are messaging |
+
+Stickers are gifts for someone else, so the picker is hidden on your own post's
+comment box and when replying to your own comment. The sticker shows below the
+text (or alone) with its name. Deleting the comment or message, moderation
+removal, or removing the friendship later does **not** take the sticker back;
+removed content just stops showing it. Both wallets record the move in
+Stickers & market history as **Sticker gift sent** / **Sticker gift received**.
+If the comment or message cannot be saved (for example the post was deleted a
+moment earlier, or you hit a rate limit), the sticker is returned straight away
+as **Sticker gift returned**. Normal comment/message limits and paused social
+accounts apply; the recipient gets the usual comment, reply or message alert.
+
 
 **Notifications** (the activity feed) stores likes and comments on your posts,
 likes on your comments, replies to your comments, and new posts by your
@@ -241,14 +267,15 @@ token. Responses, including picture bytes, use `Cache-Control: no-store`.
 | `posts/delete` | POST | Owner-only post `id`; deletes pictures and clears text |
 | `picture` | GET | Picture `id`; JPEG bytes after live audience check |
 | `conversations` | GET | Accepted friends, latest message and unread counts; participant and CSRF |
-| `messages` | GET | `participantId`, optional `before`; chronological `items`, `nextBefore` |
-| `messages` | POST | `requestId`, `participantId`, `body`; message ID |
+| `messages` | GET | `participantId`, optional `before`; chronological `items` (each with `sticker: {id,name,url}` or `null`), `nextBefore` |
+| `messages` | POST | `requestId`, `participantId`, `body`, optional `sticker` (type ID; body may then be empty); message ID |
+| `stickers` | GET | `stickers: [{id, name, url, quantity}]` for the sticker picker (available, unlisted stickers only) |
 | `messages/read` | POST | `participantId`, loaded message `seq`; monotonic read marker |
 | `messages/delete` | POST | Sender-owned message `id`; clears message text |
 | `post` | GET | Post `id`; one post with current audience checks |
 | `like` | POST | `postId`, boolean `liked`; current counts and viewer like state |
 | `comments` | GET | `postId`, optional `before`; `items` = up to 30 top-level threads plus all their replies (roots first, then oldest-first), each with `parentId`, `likes`, `liked` and `removed` (placeholders have empty `body` and `author: null`); `nextBefore` pages threads |
-| `comments` | POST | `requestId`, `postId`, `body`, optional `parentId` (a visible comment on the same post); retry-safe comment ID |
+| `comments` | POST | `requestId`, `postId`, `body`, optional `parentId` (a visible comment on the same post), optional `sticker` (type ID; body may then be empty); retry-safe comment ID |
 | `comments/like` | POST | `commentId`, boolean `liked`; current comment `likes` and `liked` |
 | `comments/delete` | POST | Comment `id`; comment author only |
 | `report` | POST | `kind: post/comment/message`, `id`, `reason` |
@@ -269,6 +296,16 @@ and conversations. Picture decoding finishes before acquiring the SQLite write
 lock; access and duplicate checks run again inside the publishing transaction.
 
 ## Deployment and checks
+
+Sticker gifts add a nullable `sticker` column to `social_comments` and
+`friend_messages` (added at startup) and a `sticker_gifts` receipt table in
+`market.sqlite`. Deploy `server/sticker-gifts.mjs`, `server/social.mjs`,
+`server/economy.mjs`, `server/reward-bridge.mjs`, `server/database.mjs`,
+`server/api.mjs`, `scripts/serve.mjs`, `lib/social.js`, `styles.css` and
+`sw.js` (cache `little-log-v105-sticker-gifts`) together, after backing up both
+SQLite files. How the gift crosses the two databases is described in
+[ECONOMY_GUIDE.md](ECONOMY_GUIDE.md#sticker-gifts).
+
 
 Threaded comments add `parent_id` and `root_id` columns to `social_comments`
 (added automatically at startup; existing comments become top-level threads)

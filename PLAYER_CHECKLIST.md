@@ -139,6 +139,10 @@ Use **Run and share with MommyBot** to request an on-demand report for the bot's
   **AUTO-LOGGED**, so they're easy to tell apart from real updates.
 - Like posts and comments, and open Comments to join the conversation. Choose
   **Reply** under a comment to answer it in a thread.
+- Choose **🎁 Add sticker** under a comment, reply or message box to send one
+  of your stickers as a gift. It leaves your collection and goes to the post
+  author, the comment author you replied to, or your messaging friend. Text is
+  optional with a sticker, and deleting the comment later doesn't take it back.
 - Delete your own comments with **Delete**. You can't delete other people's
   comments on your posts; use **Report** instead.
 - Use a post's **Options ▾** menu (under its Friends/Public label) to delete your

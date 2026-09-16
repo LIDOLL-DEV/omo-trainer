@@ -13,6 +13,9 @@ import { validateEntry, MAX_ENTRIES } from '../lib/model.js';
 import { validateGrowthChart } from './growth-chart.mjs';
 import { createAdminStore } from './admin-store.mjs';
 import { createRewardBridge } from './reward-bridge.mjs';
+import { createStickerGifts } from './sticker-gifts.mjs';
+import { stickerCatalog } from './sticker-catalog.mjs';
+import { STICKER_DUPLICATES } from './sticker-duplicates.mjs';
 
 const hash = value => createHash('sha256').update(value).digest('hex'); // Stores only a digest of session secrets and retry payloads.
 export const databasePath = () => resolve(process.env.DATA_DIR ?? 'data', 'little-log.sqlite');
@@ -245,10 +248,16 @@ export function openDatabase(filename = databasePath(), options = {}) { // Opens
 
   const admin = createAdminStore(db, records, growthChart,{onRecordWrite:(owner,entry)=>social.syncRecordPost(owner,entry.id,entry)}); // Imported corrections update existing summaries without publishing historical records.
   const sessions=createSessions(db,admin,options.sessions); // Persistent device sessions retain live access checks and server-side revocation.
-  const economy = createRewardBridge(db, filename, options); // Queue rewards here; all balances and market trades live in market.sqlite.
+  const catalog = options.stickerCatalog ?? stickerCatalog(); // Read sticker assets once; the market and social sticker display share it.
+  const economy = createRewardBridge(db, filename, {...options, stickerCatalog: catalog}); // Queue rewards here; all balances and market trades live in market.sqlite.
+  const stickerTypes = new Map(catalog.map(type => [type.id, {id: type.id, name: type.name, url: type.url}])); // Public sticker details shown on comments and messages.
+  for (const {alias, canonical} of options.stickerDuplicates ?? STICKER_DUPLICATES) if (stickerTypes.has(canonical)) stickerTypes.set(alias, stickerTypes.get(canonical)); // Merged duplicate IDs display the surviving design.
+  const stickerInfo = id => stickerTypes.get(id) ?? {id, name: 'Sticker', url: null}; // Retired assets still show a labelled placeholder.
   const friends=createFriends(db,recordFromRow,{avatarInfo:id=>social.avatarInfo(id),onRemove:(a,b)=>{notifications.community.restrictPair(a,b);activity.prune(a);activity.prune(b);}});
   const activity=createActivity(db,{now:options.now,canSee:row=>social.activityVisible(row)});
-  const social=createSocial(db,friends,{now:options.now,activity});
+  const socialCore=createSocial(db,friends,{now:options.now,activity,stickerInfo});
+  const stickerGifts=createStickerGifts(socialCore,economy); // Comments/messages with a sticker move it to the recipient's inventory first.
+  const social={...socialCore,comment:stickerGifts.comment,sendMessage:stickerGifts.sendMessage,stickers:stickerGifts.owned,reconcileStickers:stickerGifts.reconcile};
   const notifications=createNotifications(db,records,{...options.notifications,areFriends:friends.accepted,activity});
   const aiAnalysis=createAnalysisStore(db,admin,options.aiAnalysis); // Only admin API routes expose settings, jobs and saved reports.
   const statistics=createStatistics(db,admin,options.statistics); // Scoped device reads reuse the same saved-record aggregation as admin reports.

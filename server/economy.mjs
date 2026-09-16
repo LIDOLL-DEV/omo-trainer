@@ -30,6 +30,8 @@ export function createEconomy(db,catalog=stickerCatalog(),enabled=()=>true,dupli
   if(!db.prepare('PRAGMA table_info(economy_wallets)').all().some(column=>column.name==='diamonds'))db.exec("ALTER TABLE economy_wallets ADD COLUMN diamonds INTEGER NOT NULL DEFAULT 0 CHECK(typeof(diamonds)='integer' AND diamonds BETWEEN 0 AND 2147483647)"); // Add a separate bounded balance without changing existing coins or stars.
   db.exec('CREATE TABLE IF NOT EXISTS daily_bonus_rewards(owner TEXT NOT NULL REFERENCES economy_wallets(owner),source_id TEXT NOT NULL,asset TEXT NOT NULL,amount INTEGER NOT NULL,PRIMARY KEY(owner,source_id))');
   db.exec('CREATE TABLE IF NOT EXISTS registration_rewards(owner TEXT PRIMARY KEY REFERENCES economy_wallets(owner),created_at TEXT NOT NULL)');
+  db.exec(`CREATE TABLE IF NOT EXISTS sticker_gifts(sender TEXT NOT NULL REFERENCES economy_wallets(owner),source TEXT NOT NULL,hash TEXT NOT NULL,recipient TEXT NOT NULL REFERENCES economy_wallets(owner),sticker TEXT NOT NULL REFERENCES sticker_types(id),state TEXT NOT NULL CHECK(state IN ('sent','settled','returned','kept')),created_at TEXT NOT NULL,PRIMARY KEY(sender,source));
+    CREATE INDEX IF NOT EXISTS sticker_gift_state ON sticker_gifts(state,created_at);`); // One receipt per social comment/message request; 'sent' gifts are settled once their content is saved, or returned.
   db.exec('BEGIN IMMEDIATE');
   try {
     db.prepare('INSERT OR IGNORE INTO economy_wallets(owner) VALUES (?)').run(BANK);
@@ -176,6 +178,49 @@ export function createEconomy(db,catalog=stickerCatalog(),enabled=()=>true,dupli
       db.exec('COMMIT');return result;
     } catch(error) {db.exec('ROLLBACK');throw error;}
   }
+  function giveSticker(sender,input) { // Move one sticker from the sender to a comment/message recipient; the receipt makes retries transfer only once.
+    const source=input?.source,recipient=input?.recipient;
+    if(typeof source!=='string'||!/^(comment|message):[A-Za-z0-9_-]{1,80}$/.test(source)||typeof recipient!=='string'||typeof input.sticker!=='string') fail(400,'Choose a sticker to send.');
+    if([sender,recipient].includes(BANK)||sender===recipient) fail(400,'Stickers can only be sent to another member.');
+    if(!enabled(recipient)) fail(404,'That member is not available.'); // Disabled accounts cannot receive new stickers.
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      wallet(sender);wallet(recipient);
+      const sticker=db.prepare('SELECT canonical FROM sticker_aliases WHERE alias=?').get(input.sticker)?.canonical??input.sticker; // Merged duplicate IDs still send the surviving design.
+      const fingerprint=createHash('sha256').update(JSON.stringify({recipient,sticker})).digest('hex');
+      const receipt=db.prepare('SELECT * FROM sticker_gifts WHERE sender=? AND source=?').get(sender,source);
+      if(receipt) { // A retry of the same request returns the original transfer instead of sending another sticker.
+        if(receipt.hash!==fingerprint) fail(409,'This request already sent a different sticker.');
+        if(receipt.state==='returned') fail(409,'This sticker was returned to you because the message was not saved. Send it again.');
+        db.exec('COMMIT');return {sticker:receipt.sticker,repeated:true};
+      }
+      if(!db.prepare('SELECT 1 FROM sticker_types WHERE id=?').get(sticker)) fail(400,'Unknown sticker.');
+      if(balance(sender,sticker)<1) fail(409,'You do not have that sticker available to send. Stickers in open listings are reserved.');
+      adjust(sender,sticker,-1,'gift:'+source,'Sticker gift sent');adjust(recipient,sticker,1,'gift:'+source,'Sticker gift received'); // Both legs share the ledger operation.
+      db.prepare("INSERT INTO sticker_gifts VALUES (?,?,?,?,?,'sent',?)").run(sender,source,fingerprint,recipient,sticker,new Date().toISOString());
+      db.exec('COMMIT');return {sticker,repeated:false};
+    } catch(error) {db.exec('ROLLBACK');throw error;}
+  }
+  function settleSticker(sender,source) { // The comment/message is saved, so the gift is final (later deletion never takes it back).
+    db.prepare("UPDATE sticker_gifts SET state='settled' WHERE sender=? AND source=? AND state='sent'").run(sender,source);
+  }
+  function returnSticker(sender,source) { // The social content was never saved: give the sticker back if the recipient still holds one.
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const gift=db.prepare("SELECT * FROM sticker_gifts WHERE sender=? AND source=? AND state='sent'").get(sender,source);
+      if(gift&&balance(gift.recipient,gift.sticker)>=1) {
+        adjust(gift.recipient,gift.sticker,-1,'gift-return:'+source,'Sticker gift returned');adjust(sender,gift.sticker,1,'gift-return:'+source,'Sticker gift returned');
+        db.prepare("UPDATE sticker_gifts SET state='returned' WHERE sender=? AND source=?").run(sender,source);
+      } else if(gift) db.prepare("UPDATE sticker_gifts SET state='kept' WHERE sender=? AND source=?").run(sender,source); // Already traded away: never push the recipient's balance negative.
+      db.exec('COMMIT');
+    } catch(error) {db.exec('ROLLBACK');throw error;}
+  }
+  function unsettledStickers(olderThan) { // Gifts interrupted between the two databases, for the reconciliation timer.
+    return db.prepare("SELECT sender,source FROM sticker_gifts WHERE state='sent' AND created_at<? ORDER BY created_at LIMIT 100").all(new Date(olderThan).toISOString());
+  }
+  function ownedStickers(owner) { // Only this owner's available (not listed) sticker types, for the social sticker picker.
+    return db.prepare('SELECT t.id,t.name,t.url,i.quantity FROM sticker_inventory i JOIN sticker_types t ON t.id=i.sticker WHERE i.owner=? AND i.quantity>0 AND t.id NOT IN (SELECT alias FROM sticker_aliases) ORDER BY t.name,t.id').all(owner);
+  }
   function snapshot(owner) { // The gallery returns only this owner's wallet/history plus anonymous public listings and bank stock.
     db.exec('BEGIN IMMEDIATE');
     try {
@@ -194,5 +239,5 @@ export function createEconomy(db,catalog=stickerCatalog(),enabled=()=>true,dupli
       db.exec('COMMIT');return reward?{...reward,quantity:1}:null;
     } catch(error) {db.exec('ROLLBACK');throw error;}
   }
-  return {awardRecord,awardPerformanceBonus,awardDailyBonus,awardRegistration,awardStars,snapshot,act,recordReward,coins:createCoinApiStore(db,wallet,adjust,enabled)};
+  return {awardRecord,awardPerformanceBonus,awardDailyBonus,awardRegistration,awardStars,snapshot,act,recordReward,coins:createCoinApiStore(db,wallet,adjust,enabled),gifts:{give:giveSticker,settle:settleSticker,return:returnSticker,unsettled:unsettledStickers,owned:ownedStickers}};
 }

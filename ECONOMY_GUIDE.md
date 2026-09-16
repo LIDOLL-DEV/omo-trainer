@@ -46,6 +46,35 @@ Run npm test for unit/API coverage. tests/economy.test.mjs covers reward idempot
 
 Market schema version 2 merges duplicate types 13-16 into 1-4 on initialization. Player and bank quantities combine, reward receipts remain unique, and open listings use the original design. Swaps that become a same-design swap are cancelled with escrow returned. Coin and star balances are unchanged. Ledger transfers document the merge; completed trades and request receipts remain intact. Demand includes both historical IDs without counting a trader twice. Old sticker IDs are accepted as aliases on new requests. Duplicate images are excluded from the active collection and public asset allowlist.
 
+## Sticker gifts
+
+Members can attach one sticker to a Social comment, reply or private message
+(see SOCIAL_GUIDE.md). The sticker moves from the sender's available inventory
+to the recipient's inventory; it is not a bank or market trade, so it does not
+change prices, trader counts or bank stock. Escrowed (listed) stickers cannot be
+sent. Merged duplicate IDs are sent as their surviving design.
+
+The content lives in `little-log.sqlite` and the inventory in `market.sqlite`,
+so `server/sticker-gifts.mjs` coordinates them:
+
+1. Validate the comment/message and find the recipient without writing.
+2. Move the sticker in one market transaction and write a `sticker_gifts`
+   receipt keyed by sender and `comment:<requestId>` / `message:<requestId>`.
+   Retries of the same request return this receipt instead of moving another
+   sticker; the same request ID with a different recipient or sticker is refused.
+3. Save the comment/message with the sticker type ID.
+4. Mark the receipt `settled`. If step 3 failed, return the sticker at once
+   (`returned`); a returned request ID cannot be reused.
+
+The 30-second reward timer also reconciles receipts left `sent` for more than
+two minutes (for example after a crash between steps 2 and 3): saved content is
+settled, missing content is returned. If the recipient no longer holds that
+sticker, the receipt becomes `kept` and no balance goes negative. Ledger rows
+use operation `gift:<source>` / `gift-return:<source>` with reasons **Sticker
+gift sent**, **Sticker gift received** and **Sticker gift returned**; they name
+no people and copy no message text. Deleting or moderating the content never
+reverses a settled gift.
+
 ## Sale dialog
 
 Choose **Sell this sticker** in your gallery to open the sale dialog with that type selected. Choose the quantity and either sell to the bank, list for coins, or offer a swap. Opening or closing the dialog never submits a transaction. A successful exchange closes it; errors and pending retries stay visible. Bank buying controls have been removed. Older clients receive an explicit rejection for new bank purchases; retries of already completed purchases return the existing receipt without transferring anything again. The standalone selling card has been removed.

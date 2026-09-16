@@ -6,7 +6,7 @@ const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex
 const key=value=>{if(typeof value!=='string'||! /^[A-Za-z0-9_-]{1,80}$/.test(value))fail(400,'Invalid post, friend or request.');return value;};
 const text=(value,max,optional=false)=>{if(typeof value!=='string'||value.length>max||(!optional&&!value.trim())||/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value))fail(400,`Use ${optional?'up to':'1 to'} ${max} characters.`);return value.trim();};
 const cursor=value=>{if(value===undefined||value===null||value==='')return Number.MAX_SAFE_INTEGER;const n=Number(value);if(!Number.isSafeInteger(n)||n<1)fail(400,'Invalid page cursor.');return n;};
-export function createSocial(db,friends,{now=Date.now,activity}={}) {
+export function createSocial(db,friends,{now=Date.now,activity,stickerInfo=id=>({id,name:'Sticker',url:null})}={}) {
  db.exec(`CREATE TABLE IF NOT EXISTS social_posts(seq INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT NOT NULL UNIQUE,owner TEXT NOT NULL REFERENCES participants(id),request_id TEXT NOT NULL,request_hash TEXT NOT NULL,body TEXT NOT NULL,audience TEXT NOT NULL CHECK(audience IN ('friends','public')),created INTEGER NOT NULL,deleted INTEGER,UNIQUE(owner,request_id));
  CREATE INDEX IF NOT EXISTS social_post_owner ON social_posts(owner,seq);
  CREATE TABLE IF NOT EXISTS social_pictures(id TEXT PRIMARY KEY,post_id TEXT NOT NULL REFERENCES social_posts(id),position INTEGER NOT NULL,alt TEXT NOT NULL,width INTEGER NOT NULL,height INTEGER NOT NULL,data BLOB NOT NULL);
@@ -25,6 +25,7 @@ export function createSocial(db,friends,{now=Date.now,activity}={}) {
  CREATE TABLE IF NOT EXISTS social_record_preferences(owner TEXT PRIMARY KEY REFERENCES participants(id),enabled INTEGER NOT NULL DEFAULT 0,audience TEXT NOT NULL CHECK(audience IN ('friends','public')),version INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS social_record_posts(owner TEXT NOT NULL,entry_id TEXT NOT NULL,post_id TEXT NOT NULL UNIQUE REFERENCES social_posts(id),PRIMARY KEY(owner,entry_id),FOREIGN KEY(owner,entry_id) REFERENCES entries(participant_id,id));`);
  for(const column of ['parent_id','root_id'])if(!db.prepare('PRAGMA table_info(social_comments)').all().some(c=>c.name===column))db.exec('ALTER TABLE social_comments ADD COLUMN '+column+' TEXT'); // Existing comments stay top-level threads (NULL parent and root).
+ for(const table of ['social_comments','friend_messages'])if(!db.prepare(`PRAGMA table_info(${table})`).all().some(c=>c.name==='sticker'))db.exec(`ALTER TABLE ${table} ADD COLUMN sticker TEXT`); // Sticker gift type ID (market.sqlite owns the inventory); NULL for text-only content.
  db.exec(`CREATE INDEX IF NOT EXISTS social_comment_root ON social_comments(root_id,seq);
  CREATE TABLE IF NOT EXISTS social_comment_likes(comment_id TEXT NOT NULL REFERENCES social_comments(id),owner TEXT NOT NULL REFERENCES participants(id),created INTEGER NOT NULL,PRIMARY KEY(comment_id,owner));`); // One like per member per comment, mirroring post likes.
  const uploads=createUploadAdmission(db,{now});
@@ -127,7 +128,7 @@ export function createSocial(db,friends,{now=Date.now,activity}={}) {
  function thread(owner,peer){requireUser(owner);key(peer);if(!friends.accepted(owner,peer))fail(403,'Messaging is available between accepted friends.');return db.prepare("SELECT id FROM friendships WHERE a=? AND b=? AND state='accepted'").get(...[owner,peer].sort()).id;}
  function conversations(owner) {
   requireUser(owner);return friends.list(owner).filter(f=>f.state==='accepted').map(f=>{
-   const latest=db.prepare('SELECT seq,sender,body,created,deleted FROM friend_messages WHERE friendship_id=? ORDER BY seq DESC LIMIT 1').get(f.id);
+   const row=db.prepare('SELECT seq,sender,body,created,deleted,sticker FROM friend_messages WHERE friendship_id=? ORDER BY seq DESC LIMIT 1').get(f.id),latest=row?messageView(row):undefined; // Previews can say "sent a sticker" for sticker-only messages.
    const unread=db.prepare('SELECT COUNT(*) AS n FROM friend_messages WHERE friendship_id=? AND sender<>? AND deleted IS NULL AND seq>COALESCE((SELECT seq FROM friend_message_reads WHERE friendship_id=? AND owner=?),0)').get(f.id,owner,f.id,owner).n;
    const archived=db.prepare('SELECT through_seq FROM friend_message_archives WHERE friendship_id=? AND owner=?').get(f.id,owner);
    return {friend:{id:f.participantId,label:f.label,...avatarInfo(f.participantId)},latest:latest??null,unread,archived:Boolean(archived&&archived.through_seq>=(latest?.seq??0))};
@@ -136,17 +137,24 @@ export function createSocial(db,friends,{now=Date.now,activity}={}) {
  function unreadMessages(owner){requireUser(owner);return db.prepare("SELECT COUNT(*) AS unread,COALESCE(MAX(m.seq),0) AS latest FROM friend_messages m JOIN friendships f ON f.id=m.friendship_id LEFT JOIN friend_message_reads r ON r.friendship_id=f.id AND r.owner=? WHERE (f.a=? OR f.b=?) AND f.state='accepted' AND m.sender<>? AND m.deleted IS NULL AND m.seq>COALESCE(r.seq,0) AND NOT EXISTS(SELECT 1 FROM participant_access a WHERE a.participant_id=m.sender AND a.disabled=1)").get(owner,owner,owner,owner);} // Badge polling returns only counts and a cursor, never message content.
  function archiveMessages(owner,input){const id=thread(owner,input?.participantId);if(typeof input.archived!=='boolean')fail(400,'Choose archive or restore.');return transaction(()=>{thread(owner,input.participantId);if(input.archived){const seq=db.prepare('SELECT COALESCE(MAX(seq),0) AS seq FROM friend_messages WHERE friendship_id=?').get(id).seq;db.prepare('INSERT INTO friend_message_archives VALUES (?,?,?) ON CONFLICT(friendship_id,owner) DO UPDATE SET through_seq=excluded.through_seq').run(id,owner,seq);}else db.prepare('DELETE FROM friend_message_archives WHERE friendship_id=? AND owner=?').run(id,owner);return {archived:input.archived};});} // Archive only this member's inbox; new messages automatically bring the conversation back.
  function messages(owner,peer,{before}={}) {
-  const id=thread(owner,peer),rows=db.prepare('SELECT seq,id,sender,body,created,deleted FROM friend_messages WHERE friendship_id=? AND seq<? ORDER BY seq DESC LIMIT 51').all(id,cursor(before));
-  return {items:rows.slice(0,50).reverse(),nextBefore:rows.length>50?rows[49].seq:null};
+  const id=thread(owner,peer),rows=db.prepare('SELECT seq,id,sender,body,created,deleted,sticker FROM friend_messages WHERE friendship_id=? AND seq<? ORDER BY seq DESC LIMIT 51').all(id,cursor(before));
+  return {items:rows.slice(0,50).reverse().map(messageView),nextBefore:rows.length>50?rows[49].seq:null};
  }
- function sendMessage(owner,input) {
+ function messageView({sticker,...row}){return {...row,sticker:sticker&&!row.deleted?stickerInfo(sticker):null};} // Removed messages hide their sticker too; the gift itself stays with the recipient.
+ function messageInput(owner,input,sticker) { // Shared validation for sending and for choosing a sticker recipient before any write.
   requireContributor(owner);if(!input||typeof input!=='object')fail(400,'Write a message.');
-  const peer=key(input.participantId),requestId=key(input.requestId),body=text(input.body,4000),fingerprint=hash({peer,body});
+  const peer=key(input.participantId),requestId=key(input.requestId),body=text(input.body??'',4000,Boolean(sticker)); // Text is optional only when a sticker is attached.
+  if(!sticker&&input.sticker!==undefined&&input.sticker!==null)fail(400,'Stickers must be sent through the sticker gift service.'); // Never store a sticker the market did not transfer.
+  return {peer,requestId,body,fingerprint:hash(sticker?{peer,body,sticker}:{peer,body})}; // Text-only fingerprints keep their original shape for old retries.
+ }
+ const messageBudget=owner=>{if(db.prepare('SELECT COUNT(*) AS n FROM friend_messages WHERE sender=? AND created>?').get(owner,now()-60000).n>=60)fail(429,'Please wait a minute before sending more messages.');};
+ function sendMessage(owner,input,gift=null) {
+  const {peer,requestId,body,fingerprint}=messageInput(owner,input,gift?.sticker);
   return transaction(()=>{
    const id=thread(owner,peer),old=db.prepare('SELECT message_id AS id,request_hash,friendship_id FROM friend_message_receipts WHERE sender=? AND request_id=?').get(owner,requestId);
    if(old){if(old.friendship_id!==id)fail(409,'This conversation changed. Start a new message.');if(old.request_hash!==fingerprint)fail(409,'This request already belongs to a different message.');return {id:old.id,repeated:true};}
-   if(db.prepare('SELECT COUNT(*) AS n FROM friend_messages WHERE sender=? AND created>?').get(owner,now()-60000).n>=60)fail(429,'Please wait a minute before sending more messages.');
-   const messageId=randomUUID();db.prepare('INSERT INTO friend_messages(id,friendship_id,sender,request_id,request_hash,body,created) VALUES (?,?,?,?,?,?,?)').run(messageId,id,owner,requestId,fingerprint,body,now());db.prepare('INSERT INTO friend_message_receipts VALUES (?,?,?,?,?)').run(owner,requestId,fingerprint,id,messageId);activity?.record(peer,{source:'message:'+messageId,kind:'message',actor:owner,messageId,created:now()},true);return {id:messageId,repeated:false};
+   messageBudget(owner);if(gift&&gift.recipient!==peer)fail(409,'This sticker was meant for someone else.');
+   const messageId=randomUUID();db.prepare('INSERT INTO friend_messages(id,friendship_id,sender,request_id,request_hash,body,created,sticker) VALUES (?,?,?,?,?,?,?,?)').run(messageId,id,owner,requestId,fingerprint,body,now(),gift?.sticker??null);db.prepare('INSERT INTO friend_message_receipts VALUES (?,?,?,?,?)').run(owner,requestId,fingerprint,id,messageId);activity?.record(peer,{source:'message:'+messageId,kind:'message',actor:owner,messageId,created:now()},true);return {id:messageId,repeated:false};
   });
  } // The current accepted relationship owns the conversation; retries cannot duplicate a message or choose another sender.
  function readMessages(owner,input){const id=thread(owner,key(input?.participantId)),seq=Number(input.seq);if(!Number.isSafeInteger(seq)||!db.prepare('SELECT 1 FROM friend_messages WHERE friendship_id=? AND seq=?').get(id,seq))fail(400,'Choose a message in this conversation.');db.prepare('INSERT INTO friend_message_reads VALUES (?,?,?) ON CONFLICT(friendship_id,owner) DO UPDATE SET seq=MAX(seq,excluded.seq)').run(id,owner,seq);activity?.messagesRead(owner);return {read:true};}
@@ -178,29 +186,47 @@ export function createSocial(db,friends,{now=Date.now,activity}={}) {
   const roots=db.prepare(`SELECT c.seq,c.id FROM social_comments c WHERE c.post_id=? AND c.parent_id IS NULL AND c.seq<? AND ((${liveComment('c')}) OR EXISTS(SELECT 1 FROM social_comments r WHERE r.root_id=c.id AND ${liveComment('r')})) ORDER BY c.seq DESC LIMIT 31`).all(postId,cursor(before));
   const ids=JSON.stringify(roots.slice(0,30).map(r=>r.id));
   // Load each root plus every reply in its thread, roots first, all oldest-first so the client can nest them.
-  const rows=db.prepare(`SELECT c.seq,c.id,c.post_id AS postId,c.parent_id AS parentId,c.owner,c.body,c.created,(${liveComment('c')}) AS visible,p.label,
+  const rows=db.prepare(`SELECT c.seq,c.id,c.post_id AS postId,c.parent_id AS parentId,c.owner,c.body,c.sticker,c.created,(${liveComment('c')}) AS visible,p.label,
    (SELECT COUNT(*) FROM social_comment_likes l WHERE l.comment_id=c.id AND NOT EXISTS(SELECT 1 FROM participant_access a WHERE a.participant_id=l.owner AND a.disabled=1)) AS likes,
    EXISTS(SELECT 1 FROM social_comment_likes l WHERE l.comment_id=c.id AND l.owner=?) AS liked
    FROM social_comments c JOIN participants p ON p.id=c.owner WHERE c.post_id=? AND (c.id IN (SELECT value FROM json_each(?)) OR c.root_id IN (SELECT value FROM json_each(?)))
    ORDER BY c.parent_id IS NOT NULL,c.seq LIMIT 1000`).all(viewer,postId,ids,ids);
-  const items=rows.map(({owner,label,visible,likes,liked,body,...row})=>visible?{...row,body,removed:false,likes,liked:Boolean(liked),author:{id:owner,label,...avatarInfo(owner)}}:{...row,body:'',removed:true,likes:0,liked:false,author:null}); // Placeholders never reveal who wrote removed text.
+  const items=rows.map(({owner,label,visible,likes,liked,body,sticker,...row})=>visible?{...row,body,sticker:sticker?stickerInfo(sticker):null,removed:false,likes,liked:Boolean(liked),author:{id:owner,label,...avatarInfo(owner)}}:{...row,body:'',sticker:null,removed:true,likes:0,liked:false,author:null}); // Placeholders never reveal who wrote removed text.
   return {items,nextBefore:roots.length>30?roots[29].seq:null};
  }
  function commentCounts(owner,id){return {likes:db.prepare('SELECT COUNT(*) AS n FROM social_comment_likes l WHERE comment_id=? AND NOT EXISTS(SELECT 1 FROM participant_access a WHERE a.participant_id=l.owner AND a.disabled=1)').get(id).n,liked:Boolean(db.prepare('SELECT 1 FROM social_comment_likes WHERE comment_id=? AND owner=?').get(id,owner))};}
- function comment(owner,input) {
-  requireContributor(owner);const requestId=key(input?.requestId),postId=key(input.postId),parentId=input.parentId===undefined||input.parentId===null?null:key(input.parentId),body=text(input.body,2000);
-  const fingerprint=hash(parentId?{postId,parentId,body}:{postId,body}); // Top-level fingerprints keep their original shape so older retry receipts still match.
-  return transaction(()=>{const p=postAccess(owner,postId),old=db.prepare('SELECT id,request_hash FROM social_comments WHERE owner=? AND request_id=?').get(owner,requestId);
+ function commentInput(owner,input,sticker) { // Shared validation for commenting and for choosing a sticker recipient before any write.
+  requireContributor(owner);const requestId=key(input?.requestId),postId=key(input.postId),parentId=input.parentId===undefined||input.parentId===null?null:key(input.parentId),body=text(input.body??'',2000,Boolean(sticker)); // Text is optional only with a sticker.
+  if(!sticker&&input.sticker!==undefined&&input.sticker!==null)fail(400,'Stickers must be sent through the sticker gift service.'); // Never store a sticker the market did not transfer.
+  const shape=parentId?{postId,parentId,body}:{postId,body}; // Top-level fingerprints keep their original shape so older retry receipts still match.
+  return {requestId,postId,parentId,body,fingerprint:hash(sticker?{...shape,sticker}:shape)};
+ }
+ function commentTarget(owner,postId,parentId) { // Replies must target a visible comment on the same post; the gift goes to that comment's author, otherwise to the post owner.
+  const post=postAccess(owner,postId),parent=parentId?db.prepare(`SELECT c.id,c.owner,c.root_id FROM social_comments c WHERE c.id=? AND c.post_id=? AND ${liveComment('c')}`).get(parentId,postId):null;
+  if(parentId&&!parent)fail(404,'That comment is no longer available.');
+  return {post,parent,recipient:parent?parent.owner:post.owner};
+ }
+ const commentBudget=owner=>{if(db.prepare('SELECT COUNT(*) AS n FROM social_comments WHERE owner=? AND created>?').get(owner,now()-60000).n>=20)fail(429,'Please wait a minute before commenting again.');};
+ function comment(owner,input,gift=null) {
+  const {requestId,postId,parentId,body,fingerprint}=commentInput(owner,input,gift?.sticker);
+  return transaction(()=>{const {post:p,parent,recipient}=commentTarget(owner,postId,parentId),old=db.prepare('SELECT id,request_hash FROM social_comments WHERE owner=? AND request_id=?').get(owner,requestId);
    if(old){if(old.request_hash!==fingerprint)fail(409,'This request belongs to another comment.');return {id:old.id,repeated:true};}
-   if(db.prepare('SELECT COUNT(*) AS n FROM social_comments WHERE owner=? AND created>?').get(owner,now()-60000).n>=20)fail(429,'Please wait a minute before commenting again.');
-   const parent=parentId?db.prepare(`SELECT c.id,c.owner,c.root_id FROM social_comments c WHERE c.id=? AND c.post_id=? AND ${liveComment('c')}`).get(parentId,postId):null; // Replies must target a visible comment on the same post.
-   if(parentId&&!parent)fail(404,'That comment is no longer available.');
-   const id=randomUUID(),instant=now();db.prepare('INSERT INTO social_comments(id,post_id,owner,request_id,request_hash,body,created,parent_id,root_id) VALUES (?,?,?,?,?,?,?,?,?)').run(id,postId,owner,requestId,fingerprint,body,instant,parentId,parent?(parent.root_id??parent.id):null);
+   commentBudget(owner);if(gift&&gift.recipient!==recipient)fail(409,'This sticker was meant for someone else.');
+   const id=randomUUID(),instant=now();db.prepare('INSERT INTO social_comments(id,post_id,owner,request_id,request_hash,body,created,parent_id,root_id,sticker) VALUES (?,?,?,?,?,?,?,?,?,?)').run(id,postId,owner,requestId,fingerprint,body,instant,parentId,parent?(parent.root_id??parent.id):null,gift?.sticker??null);
    if(parent)activity?.record(parent.owner,{source:'comment:'+id,kind:'reply',actor:owner,postId,commentId:id,created:instant},true); // Reply alert first, so a post owner replying-to gets "replied" rather than "commented".
    activity?.record(p.owner,{source:'comment:'+id,kind:'comment',actor:owner,postId,commentId:id,created:instant},true); // Same source per owner: never two alerts for one comment.
    return {id,repeated:false};
   });
  } // Comment access follows the parent audience, and its notifications commit with the comment itself.
+ function stickerRecipient(owner,kind,input) { // Read-only pre-check before the market moves a sticker: same validation and limits the save will apply.
+  if(kind==='comment'){const {postId,parentId,requestId}=commentInput(owner,input,input?.sticker??'sticker'),{recipient}=commentTarget(owner,postId,parentId);if(recipient===owner)fail(400,'Stickers are gifts. Reply to someone else to send one.');if(!db.prepare('SELECT 1 FROM social_comments WHERE owner=? AND request_id=?').get(owner,requestId))commentBudget(owner);return {recipient,source:'comment:'+requestId};}
+  if(kind==='message'){const {peer,requestId}=messageInput(owner,input,input?.sticker??'sticker');thread(owner,peer);if(!db.prepare('SELECT 1 FROM friend_message_receipts WHERE sender=? AND request_id=?').get(owner,requestId))messageBudget(owner);return {recipient:peer,source:'message:'+requestId};}
+  fail(400,'Choose a comment or message.');
+ } // Retries skip the rate limit so an already-saved request can still return its receipt.
+ function stickerContentSaved(sender,source) { // The reconciler settles a gift only when its comment/message request was actually saved.
+  const [kind,requestId]=source.split(':');
+  return Boolean(kind==='comment'?db.prepare('SELECT 1 FROM social_comments WHERE owner=? AND request_id=?').get(sender,requestId):db.prepare('SELECT 1 FROM friend_message_receipts WHERE sender=? AND request_id=?').get(sender,requestId));
+ }
  function likeComment(owner,input) {
   requireContributor(owner);if(typeof input?.liked!=='boolean')fail(400,'Choose like or unlike.');
   return transaction(()=>{const c=db.prepare(`SELECT c.id,c.post_id,c.owner FROM social_comments c WHERE c.id=? AND ${liveComment('c')}`).get(key(input.commentId));if(!c)fail(404,'Comment not found.');postAccess(owner,c.post_id);
@@ -262,5 +288,5 @@ export function createSocial(db,friends,{now=Date.now,activity}={}) {
    db.prepare('INSERT INTO admin_audit VALUES (?,?,?,?,?,?)').run(randomUUID(),owner,'social-'+action,targetId,JSON.stringify({reason,kind:input.kind??null}),new Date(now()).toISOString());return {saved:true};
   });
  } // Require a reason and live admin role for every action; audit records contain decisions, not private content copies.
- return {upload:uploads.run,publish,feed,post,photo,deletePost,unreadMessages,conversations,messages,sendMessage,readMessages,deleteMessage,archiveMessages,like,comment,commentList,likeComment,deleteComment,report,moderation,moderationPhoto,moderate,activityVisible,profile,saveProfile,avatar,avatarInfo,memberProfile,recordPreferences,saveRecordPreferences,syncRecordPost};
+ return {upload:uploads.run,publish,feed,post,photo,deletePost,unreadMessages,conversations,messages,sendMessage,readMessages,deleteMessage,archiveMessages,like,comment,commentList,stickerRecipient,stickerContentSaved,requireUser,likeComment,deleteComment,report,moderation,moderationPhoto,moderate,activityVisible,profile,saveProfile,avatar,avatarInfo,memberProfile,recordPreferences,saveRecordPreferences,syncRecordPost};
 }
