@@ -82,7 +82,7 @@ Roll desperation: the four-step slider records low/medium/high/crisis on each ne
 
 ## Choose your theme
 
-Open Settings and choose **Little Tracker** for soft pastels or **Caregiver Tracker** for the original dark look. Little Tracker is the default. Changes apply immediately and save on this device; forms stay filled while you switch.
+Open Settings and choose **Little Log** for soft pastels or **Caregiver Tracker** for the original dark look. Little Log is the default. Changes apply immediately and save on this device; forms stay filled while you switch.
 
 - Home reminders scroll horizontally; use Pause to stop them. Reduced-motion settings display the full text without scrolling.
 - Administrators: open Admin console > Reminders, enter up to 500 characters, enable Show this reminder, then Save reminder. Turn Show off and save to hide it while retaining the text. Published reminders are visible to signed-out visitors too.

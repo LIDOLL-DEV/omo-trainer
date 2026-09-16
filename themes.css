@@ -1,4 +1,4 @@
-/* Caregiver Tracker uses the original styles unchanged; pastel overrides apply only to Little Tracker. */
+/* Caregiver Tracker uses the original styles unchanged; pastel overrides apply only to Little Log. */
 .little-brand-name { display:none; }
 .theme-palette { display:flex; gap:10px; margin-top:18px; }
 .theme-palette span { width:32px; height:32px; border-radius:50%; border:1px solid var(--border); background:var(--pink); }

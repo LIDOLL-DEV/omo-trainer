@@ -130,7 +130,7 @@ Open **Stickers & market** in Little Log. Synced observations, wettings and diap
 
 ## Tracker themes
 
-Settings ? Theme offers **Little Tracker**, the default pastel design, and **Caregiver Tracker**, the original dark Chrysalis design. The choice is saved on this device and works offline. Both themes retain the same records, chart, ledger and market controls.
+Settings ? Theme offers **Little Log**, the default pastel design, and **Caregiver Tracker**, the original dark Chrysalis design. The choice is saved on this device and works offline. Both themes retain the same records, chart, ledger and market controls.
 
 Administrators can edit the scrolling home reminder in **Admin console > Reminders**. Save text with **Show this reminder** enabled to publish it to everyone, including signed-out visitors; disable and save to hide it. Notices start hidden, support up to 500 characters, and update visible online pages within 30 seconds.
 

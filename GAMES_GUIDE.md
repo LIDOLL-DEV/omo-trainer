@@ -56,7 +56,7 @@ On the tracker host, route `/tracker/games/` to Node with the rest of the app.
 It forwards no query parameters, tokens or account identifiers. `lib/games.js`
 handles offline presentation. The service worker caches the public Games shell
 and its module, never game redirects, cookies, API responses or payments. Both
-Little Tracker and Caregiver Tracker themes share the same Games navigation.
+Little Log and Caregiver Tracker themes share the same Games navigation.
 
 Prism Drop uses `/tracker/games/balldrop`, which redirects to the configured
 bot origin at `/balldrop/login`. Deploy MommyBot with its balldrop routes before
