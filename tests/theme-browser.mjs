@@ -74,7 +74,7 @@ try {
         assert.equal(await page.$eval('#page-social',n=>!n.hidden),social);
         if(social){
           assert.equal(await page.$eval('[data-page="social"]',n=>n.getAttribute('aria-current')),'page');
-          assert.deepEqual(await page.$$eval('#social-navigation a',nodes=>nodes.map(n=>{const copy=n.cloneNode(true);copy.querySelector('[data-message-badge]')?.remove();return copy.textContent.trim();})),['Post','Feed','Friends & search','Messaging','Notifications','Profile']);
+          assert.deepEqual(await page.$$eval('#social-navigation a',nodes=>nodes.map(n=>{const copy=n.cloneNode(true);copy.querySelector('[data-message-badge]')?.remove();return copy.textContent.trim();})),['Post','Feed','Friends & search','Notifications','Profile','Messaging']);
           assert.equal(await page.$eval('#social-navigation',n=>n.hidden),true,'Social navigation stays behind the account gate');
           assert.equal(await page.$eval('#social-access-gate',n=>n.getClientRects().length>0),true,'Guests see the account gate');
           assert.equal(await page.$eval('.mobile-actions',n=>getComputedStyle(n).display),'none');

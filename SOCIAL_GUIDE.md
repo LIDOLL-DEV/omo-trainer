@@ -8,7 +8,7 @@ hide it and clear private views. Local tracker use remains available without an
 account, and Social sign-in does not connect or upload local tracker records.
 
 Open **Social** in the main menu. Its bottom bar switches between **Post**, **Feed**,
-**Friends & search**, **Messaging**, **Notifications**, and **Profile** on phones and desktop.
+**Friends & search**, **Notifications**, **Profile**, and **Messaging** on phones and desktop.
 Friends & search manages friend requests and shared records. The recording action
 bar gives way to this social bar while browsing Social.
 
