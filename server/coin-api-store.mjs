@@ -155,5 +155,6 @@ export function createCoinApiStore(db,wallet,adjust,enabled,apps=coinApps(),now=
       db.prepare('INSERT INTO coin_game_operations(client,owner,id,kind,amount,created_at,fingerprint,result,asset) VALUES (?,?,?,?,?,?,?,?,?)').run(client.id,identity.owner,input.request_id,input.kind,Math.abs(delta),now(),fingerprint,JSON.stringify(result),asset);return result;
     });
   }
-  return {app,begin,inspect,approve,token,exchange,grant,balance,connections,revoke,operation,browserApproved,browserIssue,browserSession};
+  function revokeOwner(owner){return atomic(()=>{db.prepare('UPDATE coin_grants SET revoked=1 WHERE owner=?').run(owner);db.prepare('DELETE FROM coin_devices WHERE owner=?').run(owner);db.prepare('DELETE FROM coin_browser_permissions WHERE owner=?').run(owner);});}
+  return {revokeOwner,app,begin,inspect,approve,token,exchange,grant,balance,connections,revoke,operation,browserApproved,browserIssue,browserSession};
 }

@@ -124,6 +124,24 @@ export function openDatabase(filename = databasePath(), options = {}) { // Opens
     return { id, label: name };
   }
 
+  db.exec('CREATE TABLE IF NOT EXISTS identity_states(owner TEXT PRIMARY KEY REFERENCES participants(id),version INTEGER NOT NULL)');
+  function identity(owner){const row=db.prepare('SELECT issuer,subject FROM participants WHERE id=?').get(owner);if(!row)throw new ApiError(401,'Account not found.');return row;}
+  function identityStatus(owner,value){
+    const previous=db.prepare('SELECT version FROM identity_states WHERE owner=?').get(owner)?.version??0;
+    if(value.version<previous)throw new ApiError(401,'Identity status changed. Retry after refreshing your session.');
+    const changed=previous!==value.version||value.disabled;
+    if(changed){
+      db.exec('BEGIN IMMEDIATE');try{
+        db.prepare('DELETE FROM app_sessions WHERE participant_id=?').run(owner);
+        db.prepare('UPDATE ai_report_tokens SET revoked=COALESCE(revoked,?) WHERE actor_id=?').run(Date.now(),owner);
+        db.prepare('UPDATE statistics_tokens SET revoked=COALESCE(revoked,?) WHERE actor_id=?').run(Date.now(),owner);
+        db.exec('COMMIT');
+      }catch(e){db.exec('ROLLBACK');throw e;}
+      economy.coins('revokeOwner',owner); // Persist the epoch only after both databases have revoked credentials; interrupted cleanup retries.
+      db.prepare('INSERT INTO identity_states VALUES (?,?) ON CONFLICT(owner) DO UPDATE SET version=excluded.version').run(owner,value.version);
+    }
+    return !changed;
+  }
   function saveLogin(token, payload) { // Keeps PKCE verifier, state, and nonce off the browser and expires unfinished logins after ten minutes.
     db.prepare('DELETE FROM login_attempts WHERE expires < ?').run(Date.now());
     db.prepare('INSERT INTO login_attempts VALUES (?, ?, ?)').run(hash(token), JSON.stringify(payload), Date.now() + 600000);
@@ -235,7 +253,7 @@ export function openDatabase(filename = databasePath(), options = {}) { // Opens
   const aiAnalysis=createAnalysisStore(db,admin,options.aiAnalysis); // Only admin API routes expose settings, jobs and saved reports.
   const statistics=createStatistics(db,admin,options.statistics); // Scoped device reads reuse the same saved-record aggregation as admin reports.
   return {
-    activity, social, friends, statistics, aiAnalysis, notifications, economy, admin, ensureParticipant, createSession:sessions.create, session:sessions.read, sessionNow:sessions.now, saveLogin, takeLogin, records, sync, exportRows, growthChart, saveGrowthChart, migrateIssuer,
+    identity, identityStatus, activity, social, friends, statistics, aiAnalysis, notifications, economy, admin, ensureParticipant, createSession:sessions.create, session:sessions.read, sessionNow:sessions.now, saveLogin, takeLogin, records, sync, exportRows, growthChart, saveGrowthChart, migrateIssuer,
     deleteSession:sessions.remove,
     exportCharts: () => db.prepare('SELECT participant_id, payload_json, version, updated_at FROM growth_charts ORDER BY participant_id').all().map(row => ({ participantId: row.participant_id, chart: JSON.parse(row.payload_json), version: row.version, updatedAt: row.updated_at })), // Private administrator export, separate from observation CSV.
     list: () => db.prepare('SELECT id, label, created_at FROM participants ORDER BY created_at').all(),

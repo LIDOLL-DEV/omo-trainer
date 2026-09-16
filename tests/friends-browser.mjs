@@ -1,3 +1,4 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdir,mkdtemp} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -10,8 +11,8 @@ await mkdir('artifacts',{recursive:true});const directory=await mkdtemp(resolve(
 const probe=createServer();await new Promise(r=>probe.listen(0,'127.0.0.1',r));const port=probe.address().port;await new Promise(r=>probe.close(r));
 const origin='http://127.0.0.1:'+port;
 Object.assign(process.env,{NODE_ENV:'test',HOST:'127.0.0.1',PORT:String(port),BASE_PATH:'/tracker/',PUBLIC_ORIGIN:origin,OIDC_ISSUER:'http://127.0.0.1:4174',DATA_DIR:directory});
-const {server}=await import('../scripts/serve.mjs');if(!server.listening)await new Promise(r=>server.once('listening',r));
-const db=openDatabase(resolve(directory,'little-log.sqlite')),alice=db.ensureParticipant('test','alice','Alice'),bob=db.ensureParticipant('test','bob','Bob <img src=x onerror=alert(1)>');
+const {server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})();if(!server.listening)await new Promise(r=>server.once('listening',r));
+const db=openDatabase(resolve(directory,'little-log.sqlite')),alice=db.ensureParticipant(process.env.OIDC_ISSUER,'alice','Alice'),bob=db.ensureParticipant(process.env.OIDC_ISSUER,'bob','Bob <img src=x onerror=alert(1)>');
 const entry={id:'shared-record',kind:'observation',occurredAt:'2026-09-15T12:00:00+00:00',liquidsMl:125,liquidsMode:'interval',diaperNumber:1};
 db.sync(alice.id,[{id:entry.id,entry,baseVersion:0,mutationId:entry.id}]);let browser;const errors=[];
 async function open(page,route='friends'){await page.bringToFront();await page.goto(origin+'/tracker/#'+route,{waitUntil:'networkidle0'});await page.reload({waitUntil:'networkidle0'});if(route==='friends')await page.waitForFunction(()=>document.querySelector('#friends-status').textContent.startsWith('Share selected'));}

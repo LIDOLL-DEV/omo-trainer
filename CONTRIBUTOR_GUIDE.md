@@ -11,7 +11,7 @@ Desperation roll mode uses version-3 roll metadata and a device preference indep
 
 ## Persistent device sign-in
 
-`server/sessions.mjs` owns the 30-day rolling / 180-day absolute app-session policy. Browser routes must pass their response to `login.session` so the HttpOnly cookie and SQLite expiry advance together; preserve that Set-Cookie header when also issuing wallet cookies. Never revive expired/revoked sessions, rotate credentials on ordinary polling, or trust localStorage account IDs as authentication. Live Little Log permissions remain authoritative. See [AUTH_GUIDE.md](AUTH_GUIDE.md) for deployment and the separate identity-service revocation boundary.
+`server/sessions.mjs` owns the 30-day rolling / 180-day absolute app-session policy. Browser routes must await `login.session(request,response)` so the HttpOnly cookie and SQLite expiry advance together; preserve that Set-Cookie header when also issuing wallet cookies. Never revive expired/revoked sessions, rotate credentials on ordinary polling, or trust localStorage account IDs as authentication. Live Little Log permissions remain authoritative. See [AUTH_GUIDE.md](AUTH_GUIDE.md) for deployment and signed cross-service revocation and deployment requirements.
 
 ## Admin statistics devices
 
@@ -302,3 +302,7 @@ Before delivery, check the live friendship, enabled accounts, message existence
 and thread read cursor. Reading cancels queued pushes and marks message activity
 read. Push payloads never include message text, and the service worker uses only
 the fixed local `#messages` route for notification clicks.
+
+## Security boundaries
+
+Read [SECURITY_ROLLOUT.md](SECURITY_ROLLOUT.md) before deployment. Await identity checks on every authenticated app, wallet, report and statistics route. Preserve the signed nonce-bound status check and fail closed after cache expiry. Never use a public client grant as minting authority: HTTP credit/refund operations require server signatures, for every currency. Keep signing keys out of public app metadata and shipped games. Internal ledger calls are trusted server primitives. Reserve upload slots before reading bodies, and keep reward budgets and automatic-post limits inside their record transactions.

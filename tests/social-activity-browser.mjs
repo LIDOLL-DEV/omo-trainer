@@ -1,3 +1,4 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdir,mkdtemp} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -8,8 +9,8 @@ const puppeteer=(await import(pathToFileURL(process.env.PUPPETEER_MODULE).href))
 await mkdir('artifacts',{recursive:true});const directory=await mkdtemp(resolve('artifacts/social-activity-browser-'));
 const probe=createServer();await new Promise(r=>probe.listen(0,'127.0.0.1',r));const port=probe.address().port;await new Promise(r=>probe.close(r));const origin='http://127.0.0.1:'+port;
 Object.assign(process.env,{NODE_ENV:'test',HOST:'127.0.0.1',PORT:String(port),BASE_PATH:'/tracker/',PUBLIC_ORIGIN:origin,OIDC_ISSUER:'http://127.0.0.1:4174',DATA_DIR:directory});
-const {server}=await import('../scripts/serve.mjs');if(!server.listening)await new Promise(r=>server.once('listening',r));
-const db=openDatabase(resolve(directory,'little-log.sqlite')),alice=db.ensureParticipant('test','a','Alice'),bob=db.ensureParticipant('test','b','Bob'),moderator=db.ensureParticipant('test','admin','Moderator');db.admin.bootstrap(moderator.id);
+const {server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})();if(!server.listening)await new Promise(r=>server.once('listening',r));
+const db=openDatabase(resolve(directory,'little-log.sqlite')),alice=db.ensureParticipant(process.env.OIDC_ISSUER,'a','Alice'),bob=db.ensureParticipant(process.env.OIDC_ISSUER,'b','Bob'),moderator=db.ensureParticipant(process.env.OIDC_ISSUER,'admin','Moderator');db.admin.bootstrap(moderator.id);
 const f=db.friends.act(alice.id,{action:'request',participantId:bob.id});db.friends.act(bob.id,{action:'accept',id:f.id});const post=await db.social.publish(alice.id,{requestId:'seed',body:'A status for discussion',audience:'friends'});
 let browser;const errors=[];
 async function open(page,path){await page.bringToFront();await page.goto(origin+'/tracker/'+path,{waitUntil:'networkidle0'});await page.reload({waitUntil:'networkidle0'});}

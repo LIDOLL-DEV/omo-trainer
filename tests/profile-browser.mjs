@@ -1,3 +1,4 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdir,mkdtemp} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -10,8 +11,8 @@ await mkdir('artifacts',{recursive:true});const directory=await mkdtemp(resolve(
 await sharp({create:{width:120,height:80,channels:3,background:'#cc88ad'}}).png().toFile(picture);
 const probe=createServer();await new Promise(r=>probe.listen(0,'127.0.0.1',r));const port=probe.address().port;await new Promise(r=>probe.close(r));const origin='http://127.0.0.1:'+port;
 Object.assign(process.env,{NODE_ENV:'test',HOST:'127.0.0.1',PORT:String(port),BASE_PATH:'/tracker/',PUBLIC_ORIGIN:origin,OIDC_ISSUER:'http://127.0.0.1:4174',DATA_DIR:directory});
-const {server}=await import('../scripts/serve.mjs');if(!server.listening)await new Promise(r=>server.once('listening',r));
-const db=openDatabase(resolve(directory,'little-log.sqlite')),alice=db.ensureParticipant('test','alice','Alice'),bob=db.ensureParticipant('test','bob','Bob'),moderator=db.ensureParticipant('test','moderator','Moderator');db.admin.bootstrap(moderator.id);
+const {server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})();if(!server.listening)await new Promise(r=>server.once('listening',r));
+const db=openDatabase(resolve(directory,'little-log.sqlite')),alice=db.ensureParticipant(process.env.OIDC_ISSUER,'alice','Alice'),bob=db.ensureParticipant(process.env.OIDC_ISSUER,'bob','Bob'),moderator=db.ensureParticipant(process.env.OIDC_ISSUER,'moderator','Moderator');db.admin.bootstrap(moderator.id);
 const friendship=db.friends.act(alice.id,{action:'request',participantId:bob.id});db.friends.act(bob.id,{action:'accept',id:friendship.id});
 const post=await db.social.publish(alice.id,{requestId:'seed',body:'An update',audience:'public'});db.social.comment(alice.id,{requestId:'comment',postId:post.id,body:'A comment'});db.social.sendMessage(alice.id,{requestId:'message',participantId:bob.id,body:'Hello Bob'});
 let browser;const errors=[];

@@ -1,3 +1,4 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {mkdir,mkdtemp} from 'node:fs/promises';
@@ -9,9 +10,9 @@ const puppeteer=(await import(pathToFileURL(process.env.PUPPETEER_MODULE||'C:/Us
 const probe=createServer();await new Promise(done=>probe.listen(0,'127.0.0.1',done));const port=probe.address().port;await new Promise(done=>probe.close(done));
 await mkdir('artifacts',{recursive:true});process.env.DATA_DIR=await mkdtemp(resolve('artifacts/statistics-browser-'));
 process.env.PORT=String(port);process.env.HOST='127.0.0.1';process.env.PUBLIC_ORIGIN='http://127.0.0.1:'+port;
-const {server}=await import('../scripts/serve.mjs');if(!server.listening)await new Promise(done=>server.once('listening',done));
+const {server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})();if(!server.listening)await new Promise(done=>server.once('listening',done));
 const base=process.env.PUBLIC_ORIGIN+'/tracker/',db=openDatabase(resolve(process.env.DATA_DIR,'little-log.sqlite'));
-const admin=db.ensureParticipant('test','admin','Admin'),member=db.ensureParticipant('test','member','Member');db.admin.bootstrap(admin.id);
+const admin=db.ensureParticipant(process.env.OIDC_ISSUER,'admin','Admin'),member=db.ensureParticipant(process.env.OIDC_ISSUER,'member','Member');db.admin.bootstrap(admin.id);
 const browser=await puppeteer.launch({executablePath:process.env.CHROME_PATH||'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});
 try{
   const context=await browser.createBrowserContext();await context.setCookie({name:'little_log',value:db.createSession(admin.id),domain:'127.0.0.1',path:'/tracker/',httpOnly:true});

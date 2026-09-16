@@ -36,7 +36,7 @@ export function createApi(database, login) { // Resolves each app session to an 
         const value=database.admin.reminder(route);
         return send(response,200,{text:value.enabled?value.text:'',enabled:value.enabled,version:value.version}); // Only the published notice is public; disabled drafts and editor metadata remain private.
       }
-      const session = login.session(request,route==='logout'?undefined:response); // Successful device use renews the cookie; logout only removes it.
+      const session = await login.session(request,route==='logout'?undefined:response); // Successful device use renews the cookie; logout only removes it.
       if (!session) throw new ApiError(401, 'Sign in with your shared account to sync.');
       const { csrf } = session;
       const participant={...session.participant,...database.social.avatarInfo(session.participant.id)};
@@ -62,9 +62,9 @@ export function createApi(database, login) { // Resolves each app session to an 
         const result=route==='social/like'?database.social.like(participant.id,input):route==='social/comments'?database.social.comment(participant.id,input):route==='social/comments/delete'?database.social.deleteComment(participant.id,input?.id):route==='social/report'?database.social.report(participant.id,input):database.activity.read(participant.id,input);
         return send(response,200,result);
       }
-      if(route==='social/posts'&&request.method==='POST')return send(response,200,await database.social.publish(participant.id,await body(request,12*1024*1024)));
+      if(route==='social/posts'&&request.method==='POST')return await database.social.upload(participant.id,async permit=>send(response,200,await database.social.publish(participant.id,await body(request,12*1024*1024),permit)));
       if(route==='social/record-settings'&&request.method==='POST')return send(response,200,{participant,csrf,...database.social.saveRecordPreferences(participant.id,await body(request,4096))});
-      if(route==='social/profile'&&request.method==='POST'){const result=await database.social.saveProfile(participant.id,await body(request,3*1024*1024));return send(response,200,{participant:{...session.participant,...database.social.avatarInfo(participant.id)},csrf,...result});}
+      if(route==='social/profile'&&request.method==='POST')return await database.social.upload(participant.id,async permit=>{const result=await database.social.saveProfile(participant.id,await body(request,3*1024*1024),permit);return send(response,200,{participant:{...session.participant,...database.social.avatarInfo(participant.id)},csrf,...result});});
       if(route==='social/posts/delete'&&request.method==='POST')return send(response,200,database.social.deletePost(participant.id,(await body(request,4096))?.id));
       if(route==='social/messages'&&request.method==='POST')return send(response,200,database.social.sendMessage(participant.id,await body(request,24000)));
       if(route==='social/messages/read'&&request.method==='POST')return send(response,200,database.social.readMessages(participant.id,await body(request,4096)));

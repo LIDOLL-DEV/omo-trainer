@@ -1,3 +1,4 @@
+import {rewardSignature} from './reward-signing-helper.mjs';
 ﻿import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
@@ -38,6 +39,8 @@ test('browser wallet mutations enforce origin, CSRF, account isolation, replay a
   const call=(method,...args)=>db.economy.coins(method,...args),a=call('browserIssue',alice.id),b=call('browserIssue',bob.id);
   const headers={Cookie:'lidollquest_wallet='+a,'X-CSRF-Token':call('browserSession',a).csrf};
   const operation={kind:'credit',amount:40,request_id:'browser-earned'};
+  assert.equal((await post('operations',operation,headers)).status,403);
+  headers['X-Reward-Signature']=rewardSignature(a,operation);
   assert.equal((await post('operations',operation,{Cookie:headers.Cookie})).status,403);
   assert.equal((await post('operations',operation,{...headers,Origin:'https://evil.example'})).status,403);
   assert.equal((await post('operations',operation,{...headers,'Sec-Fetch-Site':'cross-site'})).status,403);
@@ -46,6 +49,7 @@ test('browser wallet mutations enforce origin, CSRF, account isolation, replay a
   const star={kind:'credit',asset:'stars',amount:8,request_id:'browser-star'};
   assert.equal((await post('operations',star,{Cookie:headers.Cookie})).status,403);
   assert.equal((await post('operations',star,{...headers,Origin:'https://evil.example'})).status,403);
+  headers['X-Reward-Signature']=rewardSignature(a,star);
   const starReceipt=await (await post('operations',star,headers)).json();assert.equal(starReceipt.currency,'Stars');assert.equal(starReceipt.balance,8);
   assert.deepEqual(await (await post('operations',star,headers)).json(),starReceipt);
   assert.equal(call('browserSession',a).balance,90);assert.equal(call('browserSession',a).stars,8);assert.equal(call('browserSession',b).stars,0);

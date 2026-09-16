@@ -1,3 +1,4 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdir,mkdtemp} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -9,8 +10,8 @@ const puppeteer=(await import(pathToFileURL(process.env.PUPPETEER_MODULE).href))
 await mkdir('artifacts',{recursive:true});const directory=await mkdtemp(resolve('artifacts/gallery-browser-'));
 const probe=createServer();await new Promise(r=>probe.listen(0,'127.0.0.1',r));const port=probe.address().port;await new Promise(r=>probe.close(r));const origin='http://127.0.0.1:'+port;
 Object.assign(process.env,{NODE_ENV:'test',HOST:'127.0.0.1',PORT:String(port),BASE_PATH:'/tracker/',PUBLIC_ORIGIN:origin,OIDC_ISSUER:'http://127.0.0.1:4174',DATA_DIR:directory});
-const {server}=await import('../scripts/serve.mjs');if(!server.listening)await new Promise(r=>server.once('listening',r));
-const db=openDatabase(resolve(directory,'little-log.sqlite')),user=db.ensureParticipant('test','gallery','Gallery member'),pictures=[];
+const {server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})();if(!server.listening)await new Promise(r=>server.once('listening',r));
+const db=openDatabase(resolve(directory,'little-log.sqlite')),user=db.ensureParticipant(process.env.OIDC_ISSUER,'gallery','Gallery member'),pictures=[];
 for(const [width,height,color,alt] of [[1000,600,'#de88ad','Pink landscape'],[600,1000,'#8ebeda','Blue portrait'],[800,800,'#c5b8e8','Purple square']])pictures.push({data:(await sharp({create:{width,height,channels:3,background:color}}).jpeg().toBuffer()).toString('base64'),alt});
 const post=await db.social.publish(user.id,{requestId:'gallery',body:'Three photos',audience:'public',pictures}),single=await db.social.publish(user.id,{requestId:'single',body:'One photo',pictures:[pictures[0]]});let browser;const errors=[];
 async function counter(page,text){try{await page.waitForFunction(text=>document.querySelector('.post-gallery-counter')?.textContent===text,{timeout:10000},text);await page.waitForFunction(()=>{const track=document.querySelector('.post-gallery-track');return Math.abs(track.scrollLeft/track.clientWidth-Math.round(track.scrollLeft/track.clientWidth))<0.005;},{timeout:10000});}catch(error){console.log('Gallery position:',text,await page.$eval('.post-gallery-track',n=>({left:n.scrollLeft,width:n.clientWidth,scrollWidth:n.scrollWidth,slides:[...n.children].map(s=>({width:s.getBoundingClientRect().width,left:s.offsetLeft})),counter:n.parentElement.textContent})));await page.screenshot({path:resolve(directory,'failed-gallery.png')});throw error;}}

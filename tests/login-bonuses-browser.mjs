@@ -1,3 +1,4 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -11,9 +12,9 @@ const probe=createServer();await new Promise(resolve=>probe.listen(0,'127.0.0.1'
 Object.assign(process.env,{NODE_ENV:'test',HOST:'127.0.0.1',PORT:String(port),PUBLIC_ORIGIN:'http://127.0.0.1:'+port,BASE_PATH:'/tracker/',DATA_DIR:directory});
 let server,db,browser;const errors=[];
 try {
- ({server}=await import('../scripts/serve.mjs'));if(!server.listening)await new Promise(resolve=>server.once('listening',resolve));
+ ({server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})());if(!server.listening)await new Promise(resolve=>server.once('listening',resolve));
  const origin='http://127.0.0.1:'+server.address().port;let clock=Date.now();
- db=openDatabase(resolve(directory,'little-log.sqlite'),{now:()=>clock});const user=db.ensureParticipant('test','alice','Alice');
+ db=openDatabase(resolve(directory,'little-log.sqlite'),{now:()=>clock});const user=db.ensureParticipant(process.env.OIDC_ISSUER,'alice','Alice');
  for(let ago=5;ago>=1;ago--) {clock=Date.now()-ago*86400000;const occurredAt=new Date(clock).toISOString().slice(0,19)+'+00:00',entry={id:'past-'+ago,kind:'wetting',occurredAt,category:'bedwetting',position:'laying-down',diaperNumber:1};db.sync(user.id,[{id:entry.id,entry,baseVersion:0,mutationId:entry.id}]);}
  clock=Date.now();
  browser=await puppeteer.launch({executablePath:process.env.CHROME_PATH,headless:true});const context=await browser.createBrowserContext();

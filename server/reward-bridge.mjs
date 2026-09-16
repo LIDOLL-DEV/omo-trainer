@@ -28,8 +28,15 @@ export function createRewardBridge(science,filename,options={}) { // A durable o
       return store;
     } catch(error) {market.close();market=null;store=null;throw error;}
   }
+  science.exec('CREATE TABLE IF NOT EXISTS reward_budgets(owner TEXT NOT NULL,asset TEXT NOT NULL,source TEXT NOT NULL,day INTEGER NOT NULL,amount INTEGER NOT NULL,PRIMARY KEY(owner,asset,source)); CREATE INDEX IF NOT EXISTS reward_budget_day ON reward_budgets(owner,asset,day)');
+  function reserve(owner,asset,source,desired,limit){
+    const previous=science.prepare('SELECT amount FROM reward_budgets WHERE owner=? AND asset=? AND source=?').get(owner,asset,source);if(previous)return previous.amount;
+    if(science.prepare('SELECT 1 FROM reward_outbox WHERE owner=? AND asset=? AND source_id=?').get(owner,asset,source))return 0; // Existing entitlements predate this budget and must not consume another day's allowance during backfill.
+    const day=Math.floor((options.now??Date.now)()/86400000),used=science.prepare('SELECT COALESCE(SUM(amount),0) AS n FROM reward_budgets WHERE owner=? AND asset=? AND day=?').get(owner,asset,day).n;
+    const amount=Math.max(0,Math.min(desired,limit-used));science.prepare('INSERT INTO reward_budgets VALUES (?,?,?,?,?)').run(owner,asset,source,day,amount);return amount;
+  } // Reserve in the surrounding scientific transaction; even a zero award gets a permanent retry receipt.
   function awardRecord(owner,entry) { // Persist only the source identity in the scientific transaction; the market never receives health payloads.
-    const amount=performanceBonus(entry);
+    const amount=reserve(owner,'coins',entry.id,performanceBonus(entry),250);
     if(amount>0)science.prepare("INSERT OR IGNORE INTO reward_outbox(owner,asset,source_id,amount) VALUES (?,'coins',?,?)").run(owner,entry.id,amount);
     awardSticker(owner,entry);
   }
@@ -37,10 +44,10 @@ export function createRewardBridge(science,filename,options={}) { // A durable o
     science.prepare("INSERT OR IGNORE INTO reward_outbox(owner,asset,source_id,amount) VALUES (?,'registration-coins','starting-balance-v1',50)").run(owner);
   }
   function awardSticker(owner,entry) { // Historical/import backfill retains sticker-only behavior, without retroactive coin payouts.
-    if(eligible.has(entry?.kind))science.prepare("INSERT OR IGNORE INTO reward_outbox(owner,asset,source_id) VALUES (?,'sticker',?)").run(owner,entry.id);
+    if(eligible.has(entry?.kind)&&reserve(owner,'sticker',entry.id,1,20)>0)science.prepare("INSERT OR IGNORE INTO reward_outbox(owner,asset,source_id) VALUES (?,'sticker',?)").run(owner,entry.id);
   }
   function awardStars(owner,chart) { // Preserve one economic entitlement per chart cell independently of later chart edits.
-    for(const cell of Object.keys(chart?.stars??{}))science.prepare("INSERT OR IGNORE INTO reward_outbox(owner,asset,source_id) VALUES (?,'star',?)").run(owner,cell);
+    for(const cell of Object.keys(chart?.stars??{}))if(reserve(owner,'star',cell,1,50)>0)science.prepare("INSERT OR IGNORE INTO reward_outbox(owner,asset,source_id) VALUES (?,'star',?)").run(owner,cell);
   }
   function flush(owner=null) { // Commit market receipts before acknowledging delivery: crashes replay safely across the two SQLite files.
     const rewards=science.prepare('SELECT * FROM reward_outbox WHERE delivered=0'+(owner?' AND owner=?':'')+' LIMIT 1000').all(...(owner?[owner]:[]));

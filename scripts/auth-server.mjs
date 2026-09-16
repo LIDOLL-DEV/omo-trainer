@@ -1,6 +1,7 @@
+import {requestBoundary} from '../server/request-boundary.mjs';
 import {walletIdentity,walletScopes} from '../auth/wallet-identity.mjs';
 import http from 'node:http';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual, createPrivateKey, sign } from 'node:crypto';
 import Provider from 'oidc-provider';
 import { openAuthStore, AccountInputError } from '../auth/store.mjs';
 import { loadAuthConfig } from '../auth/config.mjs';
@@ -16,13 +17,13 @@ export const provider = new Provider(config.issuer, {
   features: { devInteractions: { enabled: false } },
   pkce: { required: () => true },
   extraParams: ['screen_hint'], // Lets registered apps request the signup screen while retaining the normal OIDC interaction.
-  claims: { openid: ['sub'], profile: ['preferred_username'] },
+  claims: { openid: ['sub'], profile: ['preferred_username','security_version'] },
   ttl: { Session: 7 * 86400, Grant: 7 * 86400, AccessToken: 600, IdToken: 600, AuthorizationCode: 60, Interaction: 600 },
   interactions: { url: (_context, interaction) => `/interaction/${interaction.uid}${interaction.prompt.name === 'login' && interaction.params.screen_hint === 'signup' ? '/register' : ''}` },
   async findAccount(_context, id) { // Returns only shared identity claims; the auth service has no access to tracker records.
     const account = store.account(id);
     if (!account) return undefined;
-    return { accountId: account.id, async claims() { return { sub: account.id, preferred_username: account.username }; } };
+    return { accountId: account.id, async claims() { return { sub: account.id, preferred_username: account.username, security_version: account.security_version }; } };
   },
 });
 provider.proxy = process.env.AUTH_TRUST_PROXY === '1'; // Enable only behind the trusted reverse proxy, with the private service port firewalled.
@@ -44,8 +45,19 @@ async function formBody(request) { // Limits login form size before buffering se
   return new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
 }
 
-export const authServer = http.createServer(async (request, response) => { // Delegates protocol validation and token issuance to the maintained OIDC provider.
+export const authServer = http.createServer(requestBoundary(async (request, response) => { // Delegates protocol validation and token issuance to the maintained OIDC provider.
   const path = new URL(request.url, config.issuer).pathname;
+  if(path==='/account/status') {
+    response.setHeader('Cache-Control','no-store');
+    try {
+      if(request.method!=='POST'||!(request.headers['content-type']??'').startsWith('application/json'))throw Error('Invalid status request');
+      const chunks=[];let size=0;for await(const chunk of request){size+=chunk.length;if(size>1024)throw Error('Request too large');chunks.push(chunk);}
+      const {subject,nonce}=JSON.parse(Buffer.concat(chunks));
+      if(typeof subject!=='string'||! /^[A-Za-z0-9_-]{1,100}$/.test(subject)||typeof nonce!=='string'||! /^[A-Za-z0-9_-]{43}$/.test(nonce))throw Error('Invalid status request');
+      const key=config.jwks.keys.find(k=>k.kty==='RSA'&&k.alg==='RS256'),payload=Buffer.from(JSON.stringify({issuer:config.issuer,subject,nonce,...store.security(subject)})).toString('base64url');
+      response.writeHead(200,{'Content-Type':'application/json'});return response.end(JSON.stringify({kid:key.kid,payload,signature:sign('RSA-SHA256',Buffer.from(payload),createPrivateKey({key,format:'jwk'})).toString('base64url')}));
+    }catch {response.writeHead(400);return response.end('Invalid status request.');}
+  } // Signed nonce responses let applications enforce revocations without sharing identity secrets.
   if(path==='/register'||path==='/register/') { // A shareable entry point starts fresh PKCE/state cookies through the registered Little Log client.
     response.setHeader('Cache-Control','no-store');
     response.setHeader('Referrer-Policy','no-referrer');
@@ -119,7 +131,7 @@ export const authServer = http.createServer(async (request, response) => { // De
   } catch {
     if (!response.headersSent) { response.writeHead(400, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' }); response.end('Sign-in expired or could not be completed. Return to your app and try signing in again.'); }
   }
-});
+}));
 authServer.requestTimeout = 15000;
 authServer.headersTimeout = 10000;
 const cleanup = setInterval(() => store.cleanup(), 3600000);

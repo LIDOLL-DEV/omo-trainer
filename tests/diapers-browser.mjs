@@ -1,10 +1,11 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 ﻿import assert from 'node:assert/strict';
 import {mkdtemp,mkdir} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 const puppeteer=(await import(pathToFileURL(process.env.PUPPETEER_MODULE||'C:/Users/langley/GameMakerProjects/lidollquest/node_modules/puppeteer/lib/esm/puppeteer/puppeteer.js').href)).default;
 await mkdir('artifacts',{recursive:true});process.env.DATA_DIR=await mkdtemp(resolve('artifacts/overnight-diaper-'));process.env.PORT='0';process.env.HOST='127.0.0.1';
-const {server}=await import('../scripts/serve.mjs');if(!server.listening)await new Promise(r=>server.once('listening',r));const origin=`http://127.0.0.1:${server.address().port}/tracker/`;
+const {server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})();if(!server.listening)await new Promise(r=>server.once('listening',r));const origin=`http://127.0.0.1:${server.address().port}/tracker/`;
 let browser;
 try {
  browser=await puppeteer.launch({executablePath:process.env.CHROME_PATH||'C:/Users/langley/.cache/puppeteer/chrome/win64-148.0.7778.97/chrome-win64/chrome.exe',headless:true});

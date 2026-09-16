@@ -1,3 +1,4 @@
+import {createUploadAdmission} from './upload-admission.mjs';
 import {randomUUID,createHash} from 'node:crypto';
 import sharp from 'sharp';
 const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
@@ -23,6 +24,9 @@ export function createSocial(db,friends,{now=Date.now,activity}={}) {
  CREATE TABLE IF NOT EXISTS friend_message_archives(friendship_id TEXT NOT NULL REFERENCES friendships(id) ON DELETE CASCADE,owner TEXT NOT NULL REFERENCES participants(id),through_seq INTEGER NOT NULL,PRIMARY KEY(friendship_id,owner));
  CREATE TABLE IF NOT EXISTS social_record_preferences(owner TEXT PRIMARY KEY REFERENCES participants(id),enabled INTEGER NOT NULL DEFAULT 0,audience TEXT NOT NULL CHECK(audience IN ('friends','public')),version INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS social_record_posts(owner TEXT NOT NULL,entry_id TEXT NOT NULL,post_id TEXT NOT NULL UNIQUE REFERENCES social_posts(id),PRIMARY KEY(owner,entry_id),FOREIGN KEY(owner,entry_id) REFERENCES entries(participant_id,id));`);
+ const uploads=createUploadAdmission(db,{now});
+ db.exec('CREATE INDEX IF NOT EXISTS social_post_rate ON social_posts(owner,created)');
+ const postBudget=owner=>db.prepare('SELECT COUNT(*) AS n FROM social_posts WHERE owner=? AND created>?').get(owner,now()-60000).n<10;
  const active=owner=>Boolean(db.prepare('SELECT 1 FROM participants p WHERE p.id=? AND NOT EXISTS(SELECT 1 FROM participant_access a WHERE a.participant_id=p.id AND a.disabled=1)').get(owner));
  const requireUser=owner=>{if(!active(owner))fail(403,'This account is not available.');};
  const requireContributor=owner=>{requireUser(owner);if(db.prepare('SELECT 1 FROM social_restrictions WHERE owner=?').get(owner))fail(403,'Social posting and messaging are paused for this account. Contact an administrator.');};
@@ -50,7 +54,8 @@ export function createSocial(db,friends,{now=Date.now,activity}={}) {
  function avatarInfo(owner){const row=db.prepare('SELECT version FROM social_profiles WHERE owner=? AND data IS NOT NULL').get(owner);return row?{avatarVersion:row.version}:{};}
  function profile(owner){requireUser(owner);const row=db.prepare('SELECT version,data IS NOT NULL AS has_picture FROM social_profiles WHERE owner=?').get(owner);return {version:row?.version??null,avatarVersion:row?.has_picture?row.version:null};}
  function avatar(owner,participantId,version,moderator=false){if(moderator)requireAdmin(owner);else requireUser(owner);key(participantId);if(!moderator&&!active(participantId))fail(404,'Profile picture not found.');const row=db.prepare('SELECT data,version FROM social_profiles WHERE owner=? AND data IS NOT NULL').get(participantId);if(!row||(version&&row.version!==version))fail(404,'Profile picture not found.');return row.data;}
- async function saveProfile(owner,input) {
+ async function saveProfile(owner,input,permit) {
+  requireContributor(owner);if(!uploads.valid(owner,permit))return uploads.run(owner,p=>saveProfile(owner,input,p));
   requireContributor(owner);const requestId=key(input?.requestId),version=input.version??null;if(version!==null)key(version);
   if(input.picture!==null&&(!input.picture||typeof input.picture!=='object'))fail(400,'Choose a profile picture or remove the current one.');
   const fingerprint=hash({version,picture:input.picture});
@@ -75,16 +80,18 @@ export function createSocial(db,friends,{now=Date.now,activity}={}) {
   const linked=db.prepare('SELECT post_id FROM social_record_posts WHERE owner=? AND entry_id=?').get(owner,entryId),body=recordSummary(entry);
   if(linked){if(!body)removePost(linked.post_id);else db.prepare('UPDATE social_posts SET body=? WHERE id=? AND deleted IS NULL').run(body,linked.post_id);return;}
   if(!isNew||!body||!active(owner)||db.prepare('SELECT 1 FROM social_restrictions WHERE owner=?').get(owner))return;
-  const pref=recordPreferences(owner);if(!pref.enabled)return;
+  const pref=recordPreferences(owner);if(!pref.enabled||!postBudget(owner))return;
   const id=randomUUID(),instant=now();db.prepare('INSERT INTO social_posts(id,owner,request_id,request_hash,body,audience,created) VALUES (?,?,?,?,?,?,?)').run(id,owner,randomUUID(),hash({entryId}),body,pref.audience,instant);
   db.prepare('INSERT INTO social_record_posts VALUES (?,?,?)').run(owner,entryId,id);
   for(const friend of friends.list(owner).filter(f=>f.state==='accepted'))activity?.record(friend.participantId,{source:'post:'+id,kind:'friend-post',actor:owner,postId:id,created:instant},true);
  } // Runs inside the record transaction: retries/edits never duplicate posts, and deletion never resurrects one.
- async function publish(owner,input) {
+ async function publish(owner,input,permit) {
   requireContributor(owner);if(!input||typeof input!=='object'||Array.isArray(input))fail(400,'Write a status update.');
   const requestId=key(input.requestId),body=text(input.body??'',2000,true),audience=input.audience??'friends',images=input.pictures??[];
   if(!['friends','public'].includes(audience)||!Array.isArray(images)||images.length>4||(!body&&!images.length))fail(400,'Choose an audience and add text or up to four pictures.');
   const fingerprint=hash({body,audience,images}),old=existingPost(owner,requestId,fingerprint);if(old)return old;
+  if(!postBudget(owner))fail(429,'Please wait a minute before posting again.');
+  if(images.length&&!uploads.valid(owner,permit))return uploads.run(owner,p=>publish(owner,input,p));
   const pictures=[];for(const image of images)pictures.push(await picture(image)); // Decode sequentially so a multi-picture upload has bounded memory use.
   return transaction(()=>{
    requireContributor(owner);const raced=existingPost(owner,requestId,fingerprint);if(raced)return raced;
@@ -220,5 +227,5 @@ export function createSocial(db,friends,{now=Date.now,activity}={}) {
    db.prepare('INSERT INTO admin_audit VALUES (?,?,?,?,?,?)').run(randomUUID(),owner,'social-'+action,targetId,JSON.stringify({reason,kind:input.kind??null}),new Date(now()).toISOString());return {saved:true};
   });
  } // Require a reason and live admin role for every action; audit records contain decisions, not private content copies.
- return {publish,feed,post,photo,deletePost,unreadMessages,conversations,messages,sendMessage,readMessages,deleteMessage,archiveMessages,like,comment,commentList,deleteComment,report,moderation,moderationPhoto,moderate,activityVisible,profile,saveProfile,avatar,avatarInfo,memberProfile,recordPreferences,saveRecordPreferences,syncRecordPost};
+ return {upload:uploads.run,publish,feed,post,photo,deletePost,unreadMessages,conversations,messages,sendMessage,readMessages,deleteMessage,archiveMessages,like,comment,commentList,deleteComment,report,moderation,moderationPhoto,moderate,activityVisible,profile,saveProfile,avatar,avatarInfo,memberProfile,recordPreferences,saveRecordPreferences,syncRecordPost};
 }

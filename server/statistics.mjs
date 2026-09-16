@@ -61,16 +61,17 @@ export function createStatistics(db,admin,{now=Date.now}={}) { // Every device c
         limitations:'Saved tracking counts only; absent logs do not establish zero real-world events. No raw records, notes, wallet balances or AI reports. Individual drilldown includes the selected participant ID and label; everyone totals include disabled accounts.'};
     }catch(error){db.exec('ROLLBACK');throw error;}
   }
-  return {list,create,revoke,summary,participants};
+  return {authorize,list,create,revoke,summary,participants};
 }
 
-export function statisticsApi(database,login,request,response,route) { // Devices can only read; cookies and wallet/report tokens confer no statistics permissions.
+export async function statisticsApi(database,login,request,response,route) { // Devices can only read; cookies and wallet/report tokens confer no statistics permissions.
   const send=(status,value)=>{const text=JSON.stringify(value);response.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Content-Length':Buffer.byteLength(text),'Cache-Control':'no-store',Vary:'Authorization, Origin'});response.end(text);};
   try{
     if(request.headers['sec-fetch-site']==='cross-site'||request.headers.origin&&request.headers.origin!==login.origin)throw new ApiError(403,'This origin is not allowed.');
     if(request.method!=='GET'){response.setHeader('Allow','GET');throw new ApiError(405,'The statistics API is read-only.');}
     const secret=/^Bearer (llstats_[A-Za-z0-9_-]{43})$/.exec(request.headers.authorization??'')?.[1];
     const query=Object.fromEntries(new URL(request.url,login.origin).searchParams);
+    await login.checkIdentity?.(database.statistics.authorize(secret).actor_id);
     if(!['summary','participants'].includes(route))throw new ApiError(404,'Statistics endpoint not found.');
     return send(200,database.statistics[route](secret,query));
   }catch(error){send(error.status??500,{error:error.status?error.message:'Statistics request failed. Please retry.'});}

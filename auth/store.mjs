@@ -23,6 +23,7 @@ export function openAuthStore(directory = authDirectory()) { // Keeps the shared
     CREATE INDEX IF NOT EXISTS oidc_grant ON oidc(grant_id);
     CREATE TABLE IF NOT EXISTS throttle (key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires INTEGER NOT NULL);`);
   const now = () => Math.floor(Date.now() / 1000);
+  if(!db.prepare('PRAGMA table_info(accounts)').all().some(c=>c.name==='security_version'))db.exec('ALTER TABLE accounts ADD COLUMN security_version INTEGER NOT NULL DEFAULT 0');
 
   function rateLimit(key, maximum = 10) { // Persists login throttling across restarts and counts attempts before expensive password verification.
     db.prepare('DELETE FROM throttle WHERE expires <= ?').run(now());
@@ -43,8 +44,12 @@ export function openAuthStore(directory = authDirectory()) { // Keeps the shared
     else {
       const account = db.prepare('SELECT id FROM accounts WHERE username=?').get(username);
       if (!account) throw new Error('Account not found.');
-      db.prepare('UPDATE accounts SET salt=?,hash=? WHERE id=?').run(salt, digest, account.id);
-      db.prepare("DELETE FROM oidc WHERE json_extract(payload,'$.accountId')=?").run(account.id); // Invalidates shared sessions and tokens after a password reset.
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        db.prepare('UPDATE accounts SET salt=?,hash=?,security_version=security_version+1 WHERE id=?').run(salt, digest, account.id);
+        db.prepare("DELETE FROM oidc WHERE json_extract(payload,'$.accountId')=?").run(account.id);
+        db.exec('COMMIT');
+      } catch(error) {db.exec('ROLLBACK');throw error;} // Commit the new password and revocation together, including after a process interruption.
     }
   }
 
@@ -52,7 +57,8 @@ export function openAuthStore(directory = authDirectory()) { // Keeps the shared
     const row = db.prepare('SELECT * FROM accounts WHERE username=?').get(username);
     const actual = await passwordHash(password, row?.salt ?? 'unknown-account-timing-salt');
     const expected = row ? Buffer.from(row.hash, 'base64url') : Buffer.alloc(64);
-    return timingSafeEqual(actual, expected) && row && !row.disabled ? { id: row.id, username: row.username } : null;
+    const current=row?db.prepare('SELECT hash,disabled,security_version FROM accounts WHERE id=?').get(row.id):null;
+    return timingSafeEqual(actual, expected) && current && !current.disabled && current.hash===row.hash && current.security_version===row.security_version ? { id: row.id, username: row.username } : null; // Recheck after the asynchronous KDF so a racing reset or disable cannot authenticate an old password.
   }
 
   class Adapter { // Implements oidc-provider's persistent adapter contract for sessions, grants, codes, and tokens.
@@ -75,12 +81,17 @@ export function openAuthStore(directory = authDirectory()) { // Keeps the shared
 
   return {
     Adapter, rateLimit, setPassword, verify,
-    account: id => db.prepare('SELECT id,username FROM accounts WHERE id=? AND disabled=0').get(id),
+    account: id => db.prepare('SELECT id,username,security_version FROM accounts WHERE id=? AND disabled=0').get(id),
+    security: id => {const row=db.prepare('SELECT security_version,disabled FROM accounts WHERE id=?').get(id);return {version:row?.security_version??0,disabled:!row||Boolean(row.disabled)};}, // Expose no username or password data through status checks.
     list: () => db.prepare('SELECT id,username,disabled,created_at FROM accounts ORDER BY created_at').all(),
     disable(username) { // Prevents new authentication and removes shared sessions without deleting identity or app records.
-      const row = db.prepare('UPDATE accounts SET disabled=1 WHERE username=? RETURNING id').get(username);
-      if (!row) throw new Error('Account not found.');
-      db.prepare("DELETE FROM oidc WHERE json_extract(payload,'$.accountId')=?").run(row.id);
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const row = db.prepare('UPDATE accounts SET disabled=1,security_version=security_version+1 WHERE username=? RETURNING id').get(username);
+        if (!row) throw new Error('Account not found.');
+        db.prepare("DELETE FROM oidc WHERE json_extract(payload,'$.accountId')=?").run(row.id);
+        db.exec('COMMIT');
+      } catch(error) {db.exec('ROLLBACK');throw error;} // A disabled identity and its session revocation share one durable transaction.
     },
     cleanup: () => db.prepare('DELETE FROM oidc WHERE expires IS NOT NULL AND expires<=?').run(now()),
     backup: path => backup(db, path),

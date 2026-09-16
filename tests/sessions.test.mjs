@@ -58,20 +58,20 @@ test('persistent sessions survive database reopen and legacy migration preserves
   }finally{f.db.close();}
 });
 
-test('login renews HttpOnly cookies with the exact remaining server lifetime and clears them on sign-out',()=>{
+test('login renews HttpOnly cookies with the exact remaining server lifetime and clears them on sign-out',async()=>{
   const previous=process.env.PUBLIC_ORIGIN;process.env.PUBLIC_ORIGIN='https://tracker.example';const f=fixture();
   try{
-    const login=createLogin(f.db,'/tracker/'),token=f.db.createSession(f.member.id),request={headers:{cookie:'__Secure-little_log='+token}};
-    const out=response();out.setHeader('Set-Cookie',['other=preserved']);login.session(request,out);
+    const login=createLogin(f.db,'/tracker/',{verifyIdentity:async()=>({version:0,disabled:false})}),token=f.db.createSession(f.member.id),request={headers:{cookie:'__Secure-little_log='+token}};
+    const out=response();out.setHeader('Set-Cookie',['other=preserved']);await login.session(request,out);
     assert.equal(out.headers['Set-Cookie'][0],'other=preserved');assert.match(out.headers['Set-Cookie'][1],/Path=\/tracker\/; HttpOnly; SameSite=Lax; Max-Age=2592000; Secure$/);
-    f.advance(2*day);const later=response();login.session(request,later);assert.match(later.headers['Set-Cookie'][0],/Max-Age=2592000;/);
-    const noSecret=response();assert.equal(login.session({headers:{}},noSecret),null);assert.equal(noSecret.headers['Set-Cookie'],undefined);
+    f.advance(2*day);const later=response();await login.session(request,later);assert.match(later.headers['Set-Cookie'][0],/Max-Age=2592000;/);
+    const noSecret=response();assert.equal(await login.session({headers:{}},noSecret),null);assert.equal(noSecret.headers['Set-Cookie'],undefined);
     login.logout(request,out);assert.match(out.headers['Set-Cookie'],/Max-Age=0; Secure$/);assert.equal(f.db.session(token,{renew:true}),null);
   }finally{f.db.close();if(previous===undefined)delete process.env.PUBLIC_ORIGIN;else process.env.PUBLIC_ORIGIN=previous;}
 });
 
 test('real API requests refresh the cookie, preserve CSRF and identity isolation, and cannot renew after logout',async()=>{
-  const f=fixture(),login=createLogin(f.db,'/tracker/'),api=createApi(f.db,login);
+  const f=fixture(),login=createLogin(f.db,'/tracker/',{verifyIdentity:async()=>({version:0,disabled:false})}),api=createApi(f.db,login);
   const server=createServer((req,res)=>void api(req,res,new URL(req.url,login.origin).pathname.slice('/tracker/api/'.length)));
   await new Promise(done=>server.listen(0,'127.0.0.1',done));const base='http://127.0.0.1:'+server.address().port+'/tracker/api/';
   const token=f.db.createSession(f.member.id),cookie='little_log='+token,headers={Cookie:cookie};

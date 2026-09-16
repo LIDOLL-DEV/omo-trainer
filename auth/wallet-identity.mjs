@@ -7,5 +7,5 @@ export async function walletIdentity(provider,store,issuer,secret) { // Only the
   const account=store.account(token.accountId),grant=await provider.Grant.find(token.grantId);
   const scope=walletScopes.filter(value=>String(token.scope).split(' ').includes(value));
   if(!account||!grant||!scope.length)throw Error('Wallet consent required');
-  return {issuer,subject:account.id,username:account.username,client_id:token.clientId,scope:scope.join(' '),expires_at:token.exp};
+  return {security_version:account.security_version,issuer,subject:account.id,username:account.username,client_id:token.clientId,scope:scope.join(' '),expires_at:token.exp};
 }

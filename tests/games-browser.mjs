@@ -1,3 +1,4 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 import {navigateMenu} from './navigation-helper.mjs';
 import assert from 'node:assert/strict';
 import {mkdir,mkdtemp} from 'node:fs/promises';
@@ -6,7 +7,7 @@ import {pathToFileURL} from 'node:url';
 const puppeteer=(await import(pathToFileURL(process.env.PUPPETEER_MODULE).href)).default;
 await mkdir('artifacts',{recursive:true});const directory=await mkdtemp(resolve('artifacts/games-'));
 Object.assign(process.env,{NODE_ENV:'test',HOST:'127.0.0.1',PORT:'0',PUBLIC_ORIGIN:'http://127.0.0.1:4173',OIDC_ISSUER:'http://127.0.0.1:4174',BASE_PATH:'/tracker/',DATA_DIR:directory,LIDOLLBOT_PUBLIC_ORIGIN:'https://bot.example'});
-const {server}=await import('../scripts/serve.mjs');if(!server.listening)await new Promise(done=>server.once('listening',done));
+const {server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})();if(!server.listening)await new Promise(done=>server.once('listening',done));
 const origin='http://127.0.0.1:'+server.address().port+'/tracker/';let browser;const errors=[];
 try{
   browser=await puppeteer.launch({executablePath:process.env.CHROME_PATH,headless:true,pipe:true});const page=await browser.newPage();page.on('pageerror',error=>errors.push(error.message));

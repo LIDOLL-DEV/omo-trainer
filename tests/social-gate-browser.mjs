@@ -1,3 +1,4 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdir,mkdtemp} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -8,8 +9,8 @@ const puppeteer=(await import(pathToFileURL(process.env.PUPPETEER_MODULE).href))
 await mkdir('artifacts',{recursive:true});const directory=await mkdtemp(resolve('artifacts/social-gate-'));
 const probe=createServer();await new Promise(r=>probe.listen(0,'127.0.0.1',r));const port=probe.address().port;await new Promise(r=>probe.close(r));const origin='http://127.0.0.1:'+port;
 Object.assign(process.env,{NODE_ENV:'test',HOST:'127.0.0.1',PORT:String(port),BASE_PATH:'/tracker/',PUBLIC_ORIGIN:origin,OIDC_ISSUER:'http://127.0.0.1:4174',DATA_DIR:directory});
-const {server}=await import('../scripts/serve.mjs');if(!server.listening)await new Promise(r=>server.once('listening',r));
-const db=openDatabase(resolve(directory,'little-log.sqlite')),member=db.ensureParticipant('test','member','Member'),post=await db.social.publish(member.id,{requestId:'public',body:'Members-only public post',audience:'public'});let browser;const errors=[];
+const {server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})();if(!server.listening)await new Promise(r=>server.once('listening',r));
+const db=openDatabase(resolve(directory,'little-log.sqlite')),member=db.ensureParticipant(process.env.OIDC_ISSUER,'member','Member'),post=await db.social.publish(member.id,{requestId:'public',body:'Members-only public post',audience:'public'});let browser;const errors=[];
 async function locked(page){await page.waitForFunction(()=>!document.querySelector('#social-access-gate').hidden&&!document.querySelector('#social-access-actions').hidden);assert.equal(await page.$eval('#social-content',n=>n.getClientRects().length),0);assert.equal(await page.$eval('#social-navigation',n=>n.getClientRects().length),0);} // Neither social controls nor content may be visible while the gate is locked.
 try{
  browser=await puppeteer.launch({executablePath:process.env.CHROME_PATH,headless:true});const context=await browser.createBrowserContext(),page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));await page.setViewport({width:390,height:844,isMobile:true,hasTouch:true});await page.goto(origin+'/tracker/#social',{waitUntil:'domcontentloaded'});await locked(page);

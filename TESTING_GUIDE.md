@@ -345,3 +345,7 @@ independently, manual posts, the master switch, queued-push cancellation, stored
 activity, migration defaults and old-client preference preservation.
 `tests/notifications-browser.mjs` verifies the three checkboxes through the real
 settings API, saving, reload, device re-enrollment and mobile layouts.
+
+## Security regression checks
+
+Run `npm test` for `security-hardening.test.mjs`, `security-services.test.mjs` and `reward-configuration.test.mjs`. These exercise signed revocation, real malformed HTTP against both services, bounded upload admission, post fanout, activity retention, persistent reward budgets, proof-bound minting and repeatable key provisioning. Browser fixtures use disposable signed identity services; production has no fixture bypass. Run `node tests/mommybot-diamonds-integration.mjs` with the adjacent updated MommyBot checkout to verify its real wallet signer end to end. These tests do not send Discord messages or touch production accounts.

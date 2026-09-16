@@ -1,9 +1,10 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 import assert from 'node:assert/strict';import {mkdir,mkdtemp} from 'node:fs/promises';import {resolve} from 'node:path';import {pathToFileURL} from 'node:url';import {openDatabase} from '../server/database.mjs';
 const puppeteer=(await import(pathToFileURL(process.env.PUPPETEER_MODULE).href)).default;
 await mkdir('artifacts',{recursive:true});const directory=await mkdtemp(resolve('artifacts/admin-actions-'));
 Object.assign(process.env,{DATA_DIR:directory,NODE_ENV:'test',HOST:'127.0.0.1',PORT:'0',BASE_PATH:'/tracker/',PUBLIC_ORIGIN:'http://127.0.0.1:4173',OIDC_ISSUER:'http://127.0.0.1:4174'});
-const {server}=await import('../scripts/serve.mjs');if(!server.listening)await new Promise(r=>server.once('listening',r));const origin='http://127.0.0.1:'+server.address().port;
-const db=openDatabase(resolve(directory,'little-log.sqlite')),admin=db.ensureParticipant('test','admin','Admin'),alice=db.ensureParticipant('test','alice','Alice'),bob=db.ensureParticipant('test','bob','Bob');db.admin.bootstrap(admin.id);
+const {server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})();if(!server.listening)await new Promise(r=>server.once('listening',r));const origin='http://127.0.0.1:'+server.address().port;
+const db=openDatabase(resolve(directory,'little-log.sqlite')),admin=db.ensureParticipant(process.env.OIDC_ISSUER,'admin','Admin'),alice=db.ensureParticipant(process.env.OIDC_ISSUER,'alice','Alice'),bob=db.ensureParticipant(process.env.OIDC_ISSUER,'bob','Bob');db.admin.bootstrap(admin.id);
 for(const [i,category] of ['forced','semi-forced','voluntary','semi-involuntary','involuntary'].entries()){
  const id='wet-'+i,entry={id,kind:'wetting',occurredAt:'2026-09-0'+(i<3?1:i===3?2:4)+'T'+String(i*5).padStart(2,'0')+':00:00+14:00',category,position:'sitting',diaperNumber:1};db.sync(alice.id,[{id,mutationId:id,baseVersion:0,entry}]);
 }

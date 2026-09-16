@@ -1,9 +1,10 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 import assert from 'node:assert/strict';import {mkdir,mkdtemp,readFile} from 'node:fs/promises';import {resolve} from 'node:path';import {pathToFileURL} from 'node:url';import {openDatabase} from '../server/database.mjs';import {parseCsv} from '../lib/admin-format.js';
 const puppeteer=(await import(pathToFileURL(process.env.PUPPETEER_MODULE).href)).default;
 await mkdir('artifacts',{recursive:true});const directory=await mkdtemp(resolve('artifacts/chart-builder-')),downloads=resolve(directory,'downloads');await mkdir(downloads);
 Object.assign(process.env,{DATA_DIR:directory,NODE_ENV:'test',HOST:'127.0.0.1',PORT:'0',BASE_PATH:'/tracker/',PUBLIC_ORIGIN:'http://127.0.0.1:4173',OIDC_ISSUER:'http://127.0.0.1:4174'});
-const {server}=await import('../scripts/serve.mjs');if(!server.listening)await new Promise(r=>server.once('listening',r));const origin='http://127.0.0.1:'+server.address().port;
-const db=openDatabase(resolve(directory,'little-log.sqlite')),admin=db.ensureParticipant('test','admin','Admin'),alice=db.ensureParticipant('test','alice','Alice'),bob=db.ensureParticipant('test','bob','Bob');db.admin.bootstrap(admin.id);
+const {server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})();if(!server.listening)await new Promise(r=>server.once('listening',r));const origin='http://127.0.0.1:'+server.address().port;
+const db=openDatabase(resolve(directory,'little-log.sqlite')),admin=db.ensureParticipant(process.env.OIDC_ISSUER,'admin','Admin'),alice=db.ensureParticipant(process.env.OIDC_ISSUER,'alice','Alice'),bob=db.ensureParticipant(process.env.OIDC_ISSUER,'bob','Bob');db.admin.bootstrap(admin.id);
 for(const user of [alice,bob])for(let day=1;day<=4;day++){
  const id=user.id+day,occurredAt='2026-09-0'+day+'T08:00:00+00:00';
  const entries=[{id:id+'o',kind:'observation',occurredAt,liquidsMl:day*100,liquidsMode:'interval',diaperNumber:1},...Array.from({length:day},(_,i)=>({id:id+'w'+i,kind:'wetting',occurredAt:'2026-09-0'+day+'T'+String(10+i).padStart(2,'0')+':00:00+00:00',category:'voluntary',position:'sitting',diaperNumber:1}))];

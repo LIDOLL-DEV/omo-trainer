@@ -1,8 +1,8 @@
 ﻿import test from 'node:test';import assert from 'node:assert/strict';import {DatabaseSync} from 'node:sqlite';
 import {walletIdentity} from '../auth/wallet-identity.mjs';import {verifyWalletIdentity} from '../server/coin-identity.mjs';import {createCoinApiStore,coinApps} from '../server/coin-api-store.mjs';import {authPage} from '../auth/views.mjs';
-const scope='wallet:read wallet:write stars:read stars:write diamonds:read diamonds:write',secret='s'.repeat(43),identity={issuer:'https://auth.example',subject:'alice',username:'Alice',client_id:'lidollbot',scope,expires_at:Math.floor(Date.now()/1000)+600};
+const scope='wallet:read wallet:write stars:read stars:write diamonds:read diamonds:write',secret='s'.repeat(43),identity={security_version:0,issuer:'https://auth.example',subject:'alice',username:'Alice',client_id:'lidollbot',scope,expires_at:Math.floor(Date.now()/1000)+600};
 test('identity proof requires a live access token, explicit wallet consent, grant and enabled account',async()=>{
- let token={accountId:'alice',grantId:'grant',clientId:'lidollbot',scope,exp:identity.expires_at},account={id:'alice',username:'Alice'},grant={};
+ let token={accountId:'alice',grantId:'grant',clientId:'lidollbot',scope,exp:identity.expires_at},account={id:'alice',username:'Alice',security_version:0},grant={};
  const provider={AccessToken:{find:async()=>token},Grant:{find:async()=>grant}},store={account:()=>account};
  assert.deepEqual(await walletIdentity(provider,store,identity.issuer,secret),identity);
  token.scope='openid profile';await assert.rejects(walletIdentity(provider,store,identity.issuer,secret));token.scope=scope;

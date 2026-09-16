@@ -1,3 +1,4 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -12,7 +13,7 @@ const origin='http://127.0.0.1:'+port;
 Object.assign(process.env,{NODE_ENV:'test',HOST:'127.0.0.1',PORT:String(port),BASE_PATH:'/tracker/',PUBLIC_ORIGIN:origin,OIDC_ISSUER:'http://127.0.0.1:4174',DATA_DIR:directory});
 let browser,server,db;const errors=[];
 try {
-  ({server}=await import('../scripts/serve.mjs'));
+  ({server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})());
   const type=stickerCatalog()[0];
   db=openDatabase(resolve(directory,'little-log.sqlite'),{stickerCatalog:[type]});
   const alice=db.ensureParticipant('issuer','a','Alice'),bob=db.ensureParticipant('issuer','b','Bob');

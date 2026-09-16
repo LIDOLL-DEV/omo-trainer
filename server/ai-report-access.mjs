@@ -35,7 +35,7 @@ export function createReportAccess(db,admin,{now=Date.now}={}) { // Report integ
   function authorize(secret){ // Demoting or disabling the administrator immediately removes the connection's report access.
     if(typeof secret!=='string'||!/^llreport_[A-Za-z0-9_-]{43}$/.test(secret))throw new ApiError(401,'A report-read bearer token is required.');
     const token=db.prepare('SELECT actor_id FROM ai_report_tokens WHERE token_hash=? AND revoked IS NULL').get(digest(secret));
-    if(!token)throw new ApiError(401,'Report token is invalid or revoked.');admin.requireAdmin(token.actor_id);
+    if(!token)throw new ApiError(401,'Report token is invalid or revoked.');admin.requireAdmin(token.actor_id);return token.actor_id;
   }
   function number(value,fallback,min,max){if(value===null||value===undefined)return fallback;if(!/^\d+$/.test(String(value))||!Number.isSafeInteger(Number(value))||Number(value)<min||Number(value)>max)throw new ApiError(400,'Invalid cursor or page limit.');return Number(value);}
   function feed(secret,{after,limit}={}) { // Completion cursors prevent an older queued job from being missed when it finishes after a newer job.
@@ -49,15 +49,16 @@ export function createReportAccess(db,admin,{now=Date.now}={}) { // Report integ
     const row=db.prepare(`SELECT ${metadata},j.document FROM ai_report_feed f JOIN ai_analysis_jobs j ON j.id=f.job_id WHERE j.id=? AND ${publishable}`).get(id);
     if(!row)throw new ApiError(404,'Shared completed report not found.');return {...row,format:'markdown',incomplete:row.finish_reason==='length'};
   }
-  return {list,create,revoke,feed,report};
+  return {authorize,list,create,revoke,feed,report};
 }
 
-export function reportApi(database,login,request,response,route) { // The external API accepts only bearer-authenticated reads, and never falls through to cookie-based admin routes.
+export async function reportApi(database,login,request,response,route) { // The external API accepts only bearer-authenticated reads, and never falls through to cookie-based admin routes.
   const send=(status,value)=>{response.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',Vary:'Authorization, Origin'});response.end(JSON.stringify(value));};
   try{
     if(request.headers['sec-fetch-site']==='cross-site'||(request.headers.origin&&request.headers.origin!==login.origin))throw new ApiError(403,'This origin is not allowed.');
     if(request.method!=='GET'){response.setHeader('Allow','GET');throw new ApiError(405,'This report API is read-only.');}
     const secret=/^Bearer (llreport_[A-Za-z0-9_-]{43})$/.exec(request.headers.authorization??'')?.[1],query=new URL(request.url,login.origin).searchParams;
+    await login.checkIdentity?.(database.aiAnalysis.integrations.authorize(secret));
     if(route==='reports')return send(200,database.aiAnalysis.integrations.feed(secret,{after:query.get('after'),limit:query.get('limit')}));
     const match=/^reports\/([A-Za-z0-9_-]{1,80})$/.exec(route);
     if(match)return send(200,database.aiAnalysis.integrations.report(secret,match[1]));

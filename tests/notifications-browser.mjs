@@ -1,3 +1,4 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 ﻿import assert from 'node:assert/strict';
 import {mkdir,mkdtemp} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -9,8 +10,8 @@ const keys=webpush.generateVAPIDKeys();
 const probe=createServer();await new Promise(r=>probe.listen(0,'127.0.0.1',r));const port=probe.address().port;await new Promise(r=>probe.close(r));const origin='http://127.0.0.1:'+port;
 await mkdir('artifacts',{recursive:true});const directory=await mkdtemp(resolve('artifacts/notifications-browser-'));
 Object.assign(process.env,{NODE_ENV:'test',HOST:'127.0.0.1',PORT:String(port),BASE_PATH:'/tracker/',PUBLIC_ORIGIN:origin,OIDC_ISSUER:'http://127.0.0.1:4174',DATA_DIR:directory,PUSH_VAPID_PUBLIC_KEY:keys.publicKey,PUSH_VAPID_PRIVATE_KEY:keys.privateKey,PUSH_VAPID_SUBJECT:'https://lidoll.dev'});
-const {server}=await import('../scripts/serve.mjs');if(!server.listening)await new Promise(r=>server.once('listening',r));
-const db=openDatabase(resolve(directory,'little-log.sqlite')),user=db.ensureParticipant('test','reminders','Reminder tester');
+const {server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})();if(!server.listening)await new Promise(r=>server.once('listening',r));
+const db=openDatabase(resolve(directory,'little-log.sqlite')),user=db.ensureParticipant(process.env.OIDC_ISSUER,'reminders','Reminder tester');
 const puppeteer=(await import(pathToFileURL(process.env.PUPPETEER_MODULE).href)).default;let browser;
 async function clickSetting(page,selector) {
  await page.$eval(selector,node=>node.scrollIntoView({block:'center',behavior:'instant'}));

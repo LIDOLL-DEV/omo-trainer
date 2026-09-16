@@ -1,3 +1,4 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdir,mkdtemp,stat} from 'node:fs/promises';
 import {randomBytes} from 'node:crypto';
@@ -13,8 +14,8 @@ await sharp(randomBytes(512*512*3),{raw:{width:512,height:512,channels:3}}).png(
 assert.ok((await stat(photo)).size>20*1024*1024); // A genuine 50 MP JPEG exceeds the old pre-resize limit.
 const probe=createServer();await new Promise(r=>probe.listen(0,'127.0.0.1',r));const port=probe.address().port;await new Promise(r=>probe.close(r));const origin='http://127.0.0.1:'+port;
 Object.assign(process.env,{NODE_ENV:'test',HOST:'127.0.0.1',PORT:String(port),BASE_PATH:'/tracker/',PUBLIC_ORIGIN:origin,OIDC_ISSUER:'http://127.0.0.1:4174',DATA_DIR:directory});
-const {server}=await import('../scripts/serve.mjs');if(!server.listening)await new Promise(r=>server.once('listening',r));
-const db=openDatabase(resolve(directory,'little-log.sqlite')),user=db.ensureParticipant('test','camera','Camera user'),token=db.createSession(user.id);let browser;const errors=[],bodies=[];let rejected=0,loseResponse=true,signoutBeforeRejection=false;
+const {server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})();if(!server.listening)await new Promise(r=>server.once('listening',r));
+const db=openDatabase(resolve(directory,'little-log.sqlite')),user=db.ensureParticipant(process.env.OIDC_ISSUER,'camera','Camera user'),token=db.createSession(user.id);let browser;const errors=[],bodies=[];let rejected=0,loseResponse=true,signoutBeforeRejection=false;
 try{
  browser=await puppeteer.launch({executablePath:process.env.CHROME_PATH,headless:true});const context=await browser.createBrowserContext();await context.setCookie({name:'little_log',value:token,url:origin+'/tracker/',path:'/tracker/',httpOnly:true});const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(60000);
  await page.setRequestInterception(true);page.on('request',async request=>{try{

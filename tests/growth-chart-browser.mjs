@@ -1,3 +1,4 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 import {navigateMenu} from './navigation-helper.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp } from 'node:fs/promises';
@@ -32,7 +33,7 @@ const aliceSubject = (await store.verify('alice', password)).id;
 const bobSubject = (await store.verify('bob', password)).id;
 store.close();
 const { authServer } = await import('../scripts/auth-server.mjs');
-const { server } = await import('../scripts/serve.mjs');
+const { server } = await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})();
 const db = openDatabase(resolve(process.env.DATA_DIR, 'little-log.sqlite'));
 let browser;
 const errors = [];

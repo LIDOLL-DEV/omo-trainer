@@ -1,3 +1,4 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdir,mkdtemp} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -11,8 +12,8 @@ await mkdir('artifacts',{recursive:true});const directory=await mkdtemp(resolve(
 await sharp({create:{width:80,height:60,channels:3,background:'#cf85ac'}}).png().toFile(picture);
 const probe=createServer();await new Promise(r=>probe.listen(0,'127.0.0.1',r));const port=probe.address().port;await new Promise(r=>probe.close(r));const origin='http://127.0.0.1:'+port;
 Object.assign(process.env,{NODE_ENV:'test',HOST:'127.0.0.1',PORT:String(port),BASE_PATH:'/tracker/',PUBLIC_ORIGIN:origin,OIDC_ISSUER:'http://127.0.0.1:4174',DATA_DIR:directory});
-const {server}=await import('../scripts/serve.mjs');if(!server.listening)await new Promise(r=>server.once('listening',r));
-const db=openDatabase(resolve(directory,'little-log.sqlite')),alice=db.ensureParticipant('test','alice','Alice'),bob=db.ensureParticipant('test','bob','Bob'),cara=db.ensureParticipant('test','cara','Cara');
+const {server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})();if(!server.listening)await new Promise(r=>server.once('listening',r));
+const db=openDatabase(resolve(directory,'little-log.sqlite')),alice=db.ensureParticipant(process.env.OIDC_ISSUER,'alice','Alice'),bob=db.ensureParticipant(process.env.OIDC_ISSUER,'bob','Bob'),cara=db.ensureParticipant(process.env.OIDC_ISSUER,'cara','Cara');
 const relationship=db.friends.act(alice.id,{action:'request',participantId:bob.id});db.friends.act(bob.id,{action:'accept',id:relationship.id});let browser;const errors=[];
 async function open(page,route){await page.bringToFront();await page.goto(origin+'/tracker/#'+route,{waitUntil:'networkidle0'});await page.reload({waitUntil:'networkidle0'});await page.waitForFunction(route=>['feed','post'].includes(route)?!document.querySelector('#status-post').disabled:document.querySelector('#message-friend').options.length>1,{},route);}
 async function click(page,selector){await page.waitForSelector(selector,{visible:true});await page.$eval(selector,n=>n.scrollIntoView({block:'center',behavior:'instant'}));await page.waitForFunction(selector=>{const n=document.querySelector(selector),r=n.getBoundingClientRect();return !n.disabled&&n.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));},{},selector);await page.click(selector);}

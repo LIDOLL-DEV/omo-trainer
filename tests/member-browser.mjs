@@ -1,3 +1,4 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdir,mkdtemp} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -8,8 +9,8 @@ const puppeteer=(await import(pathToFileURL(process.env.PUPPETEER_MODULE).href))
 await mkdir('artifacts',{recursive:true});const directory=await mkdtemp(resolve('artifacts/member-browser-'));
 const probe=createServer();await new Promise(r=>probe.listen(0,'127.0.0.1',r));const port=probe.address().port;await new Promise(r=>probe.close(r));const origin='http://127.0.0.1:'+port;
 Object.assign(process.env,{NODE_ENV:'test',HOST:'127.0.0.1',PORT:String(port),BASE_PATH:'/tracker/',PUBLIC_ORIGIN:origin,OIDC_ISSUER:'http://127.0.0.1:4174',DATA_DIR:directory});
-const {server}=await import('../scripts/serve.mjs');if(!server.listening)await new Promise(r=>server.once('listening',r));
-const db=openDatabase(resolve(directory,'little-log.sqlite')),alice=db.ensureParticipant('test','alice','Alice'),bob=db.ensureParticipant('test','bob','Bob'),cara=db.ensureParticipant('test','cara','Cara');
+const {server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})();if(!server.listening)await new Promise(r=>server.once('listening',r));
+const db=openDatabase(resolve(directory,'little-log.sqlite')),alice=db.ensureParticipant(process.env.OIDC_ISSUER,'alice','Alice'),bob=db.ensureParticipant(process.env.OIDC_ISSUER,'bob','Bob'),cara=db.ensureParticipant(process.env.OIDC_ISSUER,'cara','Cara');
 const friendship=db.friends.act(alice.id,{action:'request',participantId:bob.id});db.friends.act(bob.id,{action:'accept',id:friendship.id});
 const privatePost=await db.social.publish(alice.id,{requestId:'private',body:'Alice friends post'}),publicPost=await db.social.publish(alice.id,{requestId:'public',body:'Alice public post',audience:'public'});await db.social.publish(bob.id,{requestId:'bob',body:'Bob public post',audience:'public'});db.social.comment(bob.id,{requestId:'comment',postId:publicPost.id,body:'Hello Alice'});db.social.sendMessage(alice.id,{participantId:bob.id,requestId:'message',body:'Hello Bob'});
 let browser;const errors=[];

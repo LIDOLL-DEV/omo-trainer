@@ -1,3 +1,4 @@
+import {createIdentityStatus} from './identity-status.mjs';
 import * as oidc from 'openid-client';
 import { randomBytes } from 'node:crypto';
 import { checkedUrl } from '../auth/config.mjs';
@@ -7,11 +8,18 @@ export function cookie(request, name) { // Reads only the named cookie; session 
   return (request.headers.cookie ?? '').split(';').map(value => value.trim()).find(value => value.startsWith(`${name}=`))?.slice(name.length + 1);
 }
 
-export function createLogin(database, base) { // Acts as an OIDC relying party; future apps can follow this same issuer/client/callback contract.
+export function createLogin(database, base, options={}) { // Acts as an OIDC relying party; future apps can follow this same issuer/client/callback contract.
   if (process.env.NODE_ENV === 'production' && (!process.env.PUBLIC_ORIGIN || !process.env.OIDC_ISSUER)) throw new Error('Set PUBLIC_ORIGIN and OIDC_ISSUER for production.');
   const origin = checkedUrl(process.env.PUBLIC_ORIGIN ?? 'http://127.0.0.1:4173').origin;
   const issuer = checkedUrl(process.env.OIDC_ISSUER ?? 'http://127.0.0.1:4180');
   if (process.env.NODE_ENV === 'production' && (!origin.startsWith('https:') || issuer.protocol !== 'https:')) throw new Error('Production app and auth origins require HTTPS.');
+  const verifyIdentity=options.verifyIdentity??createIdentityStatus(issuer);
+  async function checkIdentity(owner,force=false){
+    let value;try{value=await verifyIdentity(database.identity(owner),force);}catch{throw Object.assign(Error('Identity verification is temporarily unavailable.'),{status:503});}
+    const unchanged=database.identityStatus(owner,value);
+    if(value.disabled||(!unchanged&&!force))throw Object.assign(Error('Sign in again after your account security changed.'),{status:401});
+    return value;
+  } // Fail closed after the bounded identity cache expires and revoke all credential families on epoch changes.
   const secure = origin.startsWith('https:');
   const sessionName = secure ? '__Secure-little_log' : 'little_log';
   const loginName = secure ? '__Secure-little_log_login' : 'little_log_login';
@@ -27,9 +35,10 @@ export function createLogin(database, base) { // Acts as an OIDC relying party; 
   const setCookie = (name, value, age) => `${name}=${value}; Path=${base}; HttpOnly; SameSite=Lax; Max-Age=${age}${secure ? '; Secure' : ''}`;
   const redirect = (response, location, cookies = []) => { response.writeHead(303, { Location: location, 'Set-Cookie': cookies, 'Cache-Control': 'no-store' }); response.end(); };
   return {
-    origin,
-    session(request,response) { // Refresh the persistent HttpOnly cookie to match the server expiry; credentials never enter browser storage.
-      const token=cookie(request,sessionName),session=database.session(token,{renew:Boolean(response)});
+    origin, checkIdentity,
+    async session(request,response) { // Refresh the persistent HttpOnly cookie to match the server expiry; credentials never enter browser storage.
+      const token=cookie(request,sessionName);let session=database.session(token);
+      if(session){await checkIdentity(session.participant.id);session=database.session(token,{renew:Boolean(response)});if(!session)return null;}
       if(session&&response){
         const remaining=Math.max(0,Math.floor((session.expiresAt-database.sessionNow())/1000));
         const previous=response.getHeader('Set-Cookie')??[];
@@ -65,6 +74,8 @@ export function createLogin(database, base) { // Acts as an OIDC relying party; 
           if (!claims?.sub) throw new Error('Missing subject.');
           const profile = await oidc.fetchUserInfo(config, tokens.access_token, claims.sub);
           const account = database.ensureParticipant(claims.iss, claims.sub, profile.preferred_username);
+          const security=await checkIdentity(account.id,true);
+          if(profile.security_version!==security.version)throw Error('Identity changed during sign-in. Start again.');
           database.deleteSession(cookie(request, sessionName));
           return redirect(response, ['social','post','feed','friends','messages','activity','profile'].includes(attempt.returnTo) ? `${base}#${attempt.returnTo}` : attempt.returnTo === 'game-wallet-embedded' ? `${base}api/lidollcoin/browser/connect?view=embedded` : attempt.returnTo === 'game-wallet' ? `${base}api/lidollcoin/browser/connect` : attempt.returnTo === 'coins' ? `${base}coins/` : attempt.returnTo === 'growth-chart' ? `${base}#potty-chart` : attempt.returnTo === 'stickers' ? `${base}#stickers` : attempt.returnTo === 'admin' ? `${base}admin/` : `${base}#settings`, [setCookie(sessionName, database.createSession(account.id), SESSION_IDLE_SECONDS), setCookie(loginName, '', 0)]);
         }

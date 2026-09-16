@@ -19,10 +19,15 @@ export function createActivity(db,{canSee=()=>true,now=Date.now}={}) {
   const record=db.prepare("SELECT json_extract(e.payload_json,'$.kind') AS kind FROM social_record_posts p JOIN entries e ON e.participant_id=p.owner AND e.id=p.entry_id WHERE p.post_id=?").get(postId);
   const column=recordPreferences[record?.kind];return !column||Boolean(pref[column]);
  } // Resolve linked records at queue and delivery time, including posts queued before these opt-outs existed.
+ function trim(owner){
+  const cutoff=db.prepare('SELECT seq FROM activity_notifications WHERE owner=? ORDER BY seq DESC LIMIT 1 OFFSET 999').get(owner)?.seq;
+  if(cutoff){db.prepare('DELETE FROM activity_deliveries WHERE notification_id IN (SELECT id FROM activity_notifications WHERE owner=? AND seq<?)').run(owner,cutoff);db.prepare('DELETE FROM activity_notifications WHERE owner=? AND seq<?').run(owner,cutoff);}
+ } // Keep a bounded recent activity history and remove delivery rows with it.
  function record(owner,{source,kind,actor=null,postId=null,commentId=null,messageId=null,title='',body='',created=now()},push=false) {
   if(!active(owner)||owner===actor||(kind==='community-checkin'&&!communityEnabled(owner)))return;
   const id=randomUUID();
   if(!db.prepare('INSERT OR IGNORE INTO activity_notifications(id,owner,source,kind,actor,post_id,comment_id,message_id,title,body,created) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(id,owner,source,kind,actor,postId,commentId,messageId,title,body,created).changes)return;
+  trim(owner);
   const pref=push?db.prepare('SELECT * FROM notification_preferences WHERE owner=?').get(owner):null;
   if(push&&pushEnabled(pref,kind,postId,messageId)) {
    for(const {endpoint} of db.prepare('SELECT endpoint FROM push_subscriptions WHERE owner=?').all(owner))db.prepare('INSERT INTO activity_deliveries(notification_id,owner,endpoint) VALUES (?,?,?)').run(id,owner,endpoint);
@@ -31,7 +36,7 @@ export function createActivity(db,{canSee=()=>true,now=Date.now}={}) {
  } // Store one account notification independently of device delivery; retries never create duplicate history or pushes.
  function valid(row){return !row.withdrawn&&active(row.owner)&&(!row.actor||active(row.actor))&&canSee(row);}
  function withdraw(id){db.prepare('UPDATE activity_notifications SET withdrawn=1 WHERE id=?').run(id);db.prepare("UPDATE activity_deliveries SET state='skipped' WHERE notification_id=? AND state='queued'").run(id);}
- function prune(owner){for(const row of db.prepare('SELECT * FROM activity_notifications WHERE owner=? AND withdrawn=0').all(owner))if(!valid(row))withdraw(row.id);}
+ function prune(owner){trim(owner);for(const row of db.prepare('SELECT * FROM activity_notifications WHERE owner=? AND withdrawn=0').all(owner))if(!valid(row))withdraw(row.id);}
  function payload(row) {
   if(!preferences[row.kind])return {title:row.title,body:row.body};
   const label=String(db.prepare('SELECT label FROM participants WHERE id=?').get(row.actor)?.label??'A member').replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g,'').trim().slice(0,80)||'A member';
@@ -57,10 +62,13 @@ export function createActivity(db,{canSee=()=>true,now=Date.now}={}) {
    if(!pushEnabled(pref,row.kind,row.post_id,row.message_id)||!db.prepare('SELECT 1 FROM push_subscriptions WHERE owner=? AND endpoint=?').get(owner,row.endpoint))db.prepare("UPDATE activity_deliveries SET state='skipped' WHERE notification_id=? AND endpoint=?").run(row.notification_id,row.endpoint);
   }
  } // Opting out or removing a device permanently cancels its pending pushes, while stored activity remains available.
+ let deliveryCursor=0;
  async function tick(instant,{send,localBlock}) {
   const started=Date.now();let attempts=0;
-  const rows=db.prepare("SELECT d.endpoint,n.* FROM activity_deliveries d JOIN activity_notifications n ON n.id=d.notification_id WHERE d.state='queued' ORDER BY n.seq,d.rowid").all();
+  const page=()=>db.prepare("SELECT d.rowid AS deliveryCursor,d.endpoint,n.* FROM activity_deliveries d JOIN activity_notifications n ON n.id=d.notification_id WHERE d.state='queued' AND d.rowid>? ORDER BY d.rowid LIMIT 1000").all(deliveryCursor);
+  let rows=page();if(!rows.length&&deliveryCursor){deliveryCursor=0;rows=page();}
   for(const row of rows) {
+   if(attempts>=100)break;deliveryCursor=row.deliveryCursor;
    const time=instant+Date.now()-started;if(!db.prepare("SELECT 1 FROM activity_deliveries WHERE notification_id=? AND endpoint=? AND state='queued'").get(row.id,row.endpoint))continue;
    const sub=db.prepare('SELECT payload FROM push_subscriptions WHERE owner=? AND endpoint=?').get(row.owner,row.endpoint),pref=db.prepare('SELECT * FROM notification_preferences WHERE owner=?').get(row.owner);
    if(!valid(row)){withdraw(row.id);continue;}

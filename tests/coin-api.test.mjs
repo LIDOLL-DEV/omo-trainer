@@ -1,3 +1,4 @@
+import {rewardSignature} from './reward-signing-helper.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {openDatabase} from '../server/database.mjs';
@@ -67,7 +68,9 @@ test('external API uses bearer tokens and explicit origins; browser consent requ
     const headers={Authorization:'Bearer '+result.access_token};
     assert.equal((await fetch(external+'wallet?client_id=lidollquest',{headers:{Cookie:session}})).status,401);
     const wallet=await fetch(external+'wallet?client_id=lidollquest',{headers});assert.equal(wallet.status,200);assert.equal(wallet.headers.get('cache-control'),'no-store');
-    const payment=await post(external+'operations?client_id=lidollquest',{kind:'credit',amount:25,request_id:'api-reward',owner:b.id},headers);assert.equal(payment.status,200);
+    const input={kind:'credit',amount:25,request_id:'api-reward',owner:b.id};
+    assert.equal((await post(external+'operations?client_id=lidollquest',input,headers)).status,403);
+    const payment=await post(external+'operations?client_id=lidollquest',input,{...headers,'X-Reward-Signature':rewardSignature(result.access_token,input)});assert.equal(payment.status,200);
     assert.equal(call('balance',result.access_token).balance,75);assert.equal(db.economy.snapshot(b.id).wallet.coins,50);
     assert.equal((await fetch(base+'session',{headers})).status,401,'Game token cannot retrieve scientific records');
     const allowed=await fetch(external+'wallet?client_id=lidollquest',{headers:{...headers,Origin:login.origin}});assert.equal(allowed.headers.get('access-control-allow-origin'),login.origin);assert.equal(allowed.headers.get('access-control-allow-credentials'),null);

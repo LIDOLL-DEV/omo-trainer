@@ -1,3 +1,4 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 import assert from 'node:assert/strict';
 import { mkdir,mkdtemp,writeFile,readFile,access } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -23,7 +24,7 @@ await store.setPassword('alice',password,true);
 const adminSubject=(await store.verify('lid0ll',password)).id,aliceSubject=(await store.verify('alice',password)).id;
 store.close();
 const {authServer}=await import('../scripts/auth-server.mjs');
-const {server}=await import('../scripts/serve.mjs');
+const {server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})();
 const db=openDatabase(resolve(process.env.DATA_DIR,'little-log.sqlite'));
 const alice=db.ensureParticipant(issuer,aliceSubject,'Alice');
 const now=new Date(),day=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,10);

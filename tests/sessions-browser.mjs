@@ -11,14 +11,14 @@ const puppeteer=(await import(pathToFileURL(process.env.PUPPETEER_MODULE||'C:/Us
 await mkdir('artifacts',{recursive:true});const directory=await mkdtemp(resolve('artifacts/sessions-browser-'));
 let now=Date.now(),login,api;const db=openDatabase(resolve(directory,'science.sqlite'),{sessions:{now:()=>now}});
 const member=db.ensureParticipant('test','member','Remembered member'),token=db.createSession(member.id);
-const server=createServer((request,response)=>{ // Only this synthetic fixture has a bootstrap route; production still signs in through OIDC.
+const server=createServer(async(request,response)=>{ // Only this synthetic fixture has a bootstrap route; production still signs in through OIDC.
   if(request.url==='/tracker/test-bootstrap'){
-    login.session({headers:{cookie:'little_log='+token}},response);response.writeHead(200,{'Content-Type':'text/html'});response.end('<p>Synthetic sign-in completed.</p>');return;
+    await login.session({headers:{cookie:'little_log='+token}},response);response.writeHead(200,{'Content-Type':'text/html'});response.end('<p>Synthetic sign-in completed.</p>');return;
   }
   void api(request,response,new URL(request.url,login.origin).pathname.slice('/tracker/api/'.length));
 });
 await new Promise(done=>server.listen(0,'127.0.0.1',done));const origin='http://127.0.0.1:'+server.address().port;
-process.env.PUBLIC_ORIGIN=origin;login=createLogin(db,'/tracker/');api=createApi(db,login);
+process.env.PUBLIC_ORIGIN=origin;login=createLogin(db,'/tracker/',{verifyIdentity:async()=>({version:0,disabled:false})});api=createApi(db,login);
 let browser;
 const launch=()=>puppeteer.launch({executablePath:process.env.CHROME_PATH||'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true,userDataDir:resolve(directory,'browser-profile')});
 try{

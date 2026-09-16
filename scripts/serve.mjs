@@ -1,3 +1,4 @@
+import {requestBoundary} from '../server/request-boundary.mjs';
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -59,7 +60,7 @@ const files = new Map([
   ['icons/icon-512.png', 'image/png'], ['icons/maskable-512.png', 'image/png'], ['icons/apple-touch-icon.png', 'image/png'],
 ]);
 
-export const server = http.createServer(async (request, response) => { // Serves only the public allowlist, never source tools, backups, or project documentation.
+export const server = http.createServer(requestBoundary(async (request, response) => { // Serves only the public allowlist, never source tools, backups, or project documentation.
   response.setHeader('X-Content-Type-Options', 'nosniff');
   response.setHeader('Referrer-Policy', 'no-referrer');
   response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'");
@@ -85,7 +86,7 @@ export const server = http.createServer(async (request, response) => { // Serves
     response.writeHead(200, { 'Content-Type': files.get(filename), 'Content-Length': content.length, 'Cache-Control': 'no-cache' });
     response.end(request.method === 'HEAD' ? undefined : content);
   } catch { response.writeHead(503); response.end('App asset unavailable'); }
-});
+}));
 
 const rewardTimer=setInterval(()=>database.economy.tryFlush(),30000);rewardTimer.unref(); // Resume reward delivery even without another record submission.
 server.on('close', () => {stopAnalysisWorker();clearInterval(rewardTimer);database.close();}); // Flushes and closes the persistent connection during controlled shutdowns and tests.

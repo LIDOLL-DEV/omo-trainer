@@ -1,3 +1,4 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdir,mkdtemp} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -8,8 +9,8 @@ const puppeteer=(await import(pathToFileURL(process.env.PUPPETEER_MODULE).href))
 await mkdir('artifacts',{recursive:true});const directory=await mkdtemp(resolve('artifacts/social-mobile-'));
 const probe=createServer();await new Promise(r=>probe.listen(0,'127.0.0.1',r));const port=probe.address().port;await new Promise(r=>probe.close(r));const origin='http://127.0.0.1:'+port;
 Object.assign(process.env,{NODE_ENV:'test',HOST:'127.0.0.1',PORT:String(port),BASE_PATH:'/tracker/',PUBLIC_ORIGIN:origin,OIDC_ISSUER:'http://127.0.0.1:4174',DATA_DIR:directory});
-const {server}=await import('../scripts/serve.mjs');if(!server.listening)await new Promise(r=>server.once('listening',r));
-const db=openDatabase(resolve(directory,'little-log.sqlite')),alice=db.ensureParticipant('test','alice','Alice'),bob=db.ensureParticipant('test','bob','Bob'),cara=db.ensureParticipant('test','cara','Cara');
+const {server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})();if(!server.listening)await new Promise(r=>server.once('listening',r));
+const db=openDatabase(resolve(directory,'little-log.sqlite')),alice=db.ensureParticipant(process.env.OIDC_ISSUER,'alice','Alice'),bob=db.ensureParticipant(process.env.OIDC_ISSUER,'bob','Bob'),cara=db.ensureParticipant(process.env.OIDC_ISSUER,'cara','Cara');
 for(const friend of [bob,cara]){const f=db.friends.act(alice.id,{action:'request',participantId:friend.id});db.friends.act(friend.id,{action:'accept',id:f.id});}
 for(let i=0;i<8;i++)await db.social.publish(bob.id,{requestId:'post'+i,body:'A long update. '.repeat(50),audience:'public'});
 for(let i=0;i<52;i++)db.social.sendMessage(bob.id,{requestId:'message'+i,participantId:alice.id,body:'Message '+i+' from Bob'});

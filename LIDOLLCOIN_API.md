@@ -1,5 +1,7 @@
 # LiDollCoin API v1
 
+**Security update:** Credits and refunds now require server signatures. Follow the server-authority section below and [SECURITY_ROLLOUT.md](SECURITY_ROLLOUT.md) before upgrading. The legacy LiDollQuest queue described here needs a compatible server-owned gameplay integration.
+
 LiDollQuest can link a Little Log account and use its existing **online LiDollCoin balance** and separate **stars balance**. The game sends individual earnings and costs. It never uploads or replaces the online balance with a value from a save file. Unlinked games keep local gold; linking does not deposit that gold, and disconnecting restores the separate local balance.
 
 The initial release accepts earnings reported by a linked game, as requested. It does not verify game progress, prevent edited-save reward farming, or provide a real-money payment system. Configurable earning limits, scoped grants, whole-number balances, atomic ledger writes and replay protection are active now.
@@ -243,3 +245,11 @@ Authorized wallet clients see it in the normal coin balance; no new scope or API
 call is required. It is separate from client-issued credits and does not consume
 the client's daily earning allowance. Existing tracker accounts keep their funds.
 See [ECONOMY_GUIDE.md](ECONOMY_GUIDE.md) for eligibility and delivery behavior.
+
+## Server authority for credits and refunds
+
+Every HTTP `credit` or `refund`, for coins, stars and diamonds, now requires `X-Reward-Signature`. A user grant alone can read and debit its owner's wallet. Missing/invalid reward proofs return HTTP 403 with `reward_authorization`; reconnecting cannot fix a missing server key. Configure `LIDOLLCOIN_REWARD_KEYS` only on the tracker and the matching per-client key only on the trusted game/bot server. Never embed it in a downloadable game, browser or public app registration.
+
+The signature is lowercase hexadecimal HMAC-SHA256 with the configured key over `client_id + '\n' + bearer_token + '\n' + JSON.stringify(operation)`. Sign the exact object sent, including request ID, asset and amount/original ID. Retries retain the same operation and ID. Existing receipt, scope, per-client daily issuance and exact original-debit refund rules still apply. The browser operations endpoint enforces the same authority check; it is not an alternative way to mint. MommyBot's updated WalletClient signs automatically. See [SECURITY_ROLLOUT.md](SECURITY_ROLLOUT.md) for coordinated deployment.
+
+The earlier LiDollQuest description in this document describes its legacy client-generated operation queue. That queue cannot authorize new credits/refunds after this update. Server-owned gameplay integration is required; neither client-reported wins nor local save files constitute proof.

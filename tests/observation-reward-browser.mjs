@@ -1,3 +1,4 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 import assert from 'node:assert/strict';
 import {mkdir,mkdtemp} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -10,7 +11,7 @@ await mkdir('artifacts',{recursive:true});const directory=await mkdtemp(resolve(
 Object.assign(process.env,{NODE_ENV:'test',HOST:'127.0.0.1',PORT:String(port),BASE_PATH:'/tracker/',PUBLIC_ORIGIN:origin,OIDC_ISSUER:'http://127.0.0.1:4174',DATA_DIR:directory});
 let browser,server,db;const errors=[];
 try {
- ({server}=await import('../scripts/serve.mjs'));if(!server.listening)await new Promise(r=>server.once('listening',r));
+ ({server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})());if(!server.listening)await new Promise(r=>server.once('listening',r));
  db=openDatabase(resolve(directory,'little-log.sqlite'));const alice=db.ensureParticipant('issuer','alice','Alice');
  browser=await puppeteer.launch({executablePath:process.env.CHROME_PATH,headless:true,pipe:true});const context=await browser.createBrowserContext();
  await context.setCookie({name:'little_log',value:db.createSession(alice.id),url:origin+'/tracker/',path:'/tracker/',httpOnly:true,sameSite:'Lax'});

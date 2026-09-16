@@ -1,8 +1,9 @@
+import {startIdentityFixture} from './identity-fixture.mjs';
 ﻿import assert from 'node:assert/strict';import {mkdir,mkdtemp} from 'node:fs/promises';import {resolve} from 'node:path';import {pathToFileURL} from 'node:url';import {openDatabase} from '../server/database.mjs';
 const puppeteer=(await import(pathToFileURL(process.env.PUPPETEER_MODULE||'C:/Users/langley/GameMakerProjects/lidollquest/node_modules/puppeteer/lib/esm/puppeteer/puppeteer.js').href)).default;
 await mkdir('artifacts',{recursive:true});process.env.DATA_DIR=await mkdtemp(resolve('artifacts/admin-prediction-'));process.env.PORT='0';process.env.HOST='127.0.0.1';
-const {server}=await import('../scripts/serve.mjs');if(!server.listening)await new Promise(r=>server.once('listening',r));const origin=`http://127.0.0.1:${server.address().port}`,base=origin+'/tracker/';
-const db=openDatabase(resolve(process.env.DATA_DIR,'little-log.sqlite')),admin=db.ensureParticipant('test','admin','Admin'),alice=db.ensureParticipant('test','alice','Alice'),bob=db.ensureParticipant('test','bob','Bob'),empty=db.ensureParticipant('test','empty','Empty');db.admin.bootstrap(admin.id);
+const {server}=await (async()=>{await startIdentityFixture();return import('../scripts/serve.mjs');})();if(!server.listening)await new Promise(r=>server.once('listening',r));const origin=`http://127.0.0.1:${server.address().port}`,base=origin+'/tracker/';
+const db=openDatabase(resolve(process.env.DATA_DIR,'little-log.sqlite')),admin=db.ensureParticipant(process.env.OIDC_ISSUER,'admin','Admin'),alice=db.ensureParticipant(process.env.OIDC_ISSUER,'alice','Alice'),bob=db.ensureParticipant(process.env.OIDC_ISSUER,'bob','Bob'),empty=db.ensureParticipant(process.env.OIDC_ISSUER,'empty','Empty');db.admin.bootstrap(admin.id);
 const now=Date.now(),minute=60000,stamp=t=>new Date(t).toISOString().replace(/\.\d{3}Z$/,'+00:00');
 function seed(user,duration){const entries=[];for(let day=24;day>=0;day--){const end=now-day*86400000-10*minute;for(const [i,time] of [end-duration*minute,end].entries()){const id='day-'+day+'-'+i;entries.push({id,mutationId:'seed-'+id,baseVersion:0,entry:{id,kind:'wetting',occurredAt:stamp(time),category:'voluntary',position:'sitting',diaperNumber:1}});}}db.sync(user.id,entries);}
 seed(alice,120);seed(bob,45);

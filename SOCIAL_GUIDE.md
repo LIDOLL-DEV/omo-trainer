@@ -323,3 +323,7 @@ Profiles show only posts you can already read: your own posts, friends-only post
 from accepted friends, and public posts. Profiles do not reveal tracking records,
 account credentials or someone's private friend list. Disabled or missing
 accounts are unavailable. Use Older posts / Newest posts to navigate history.
+
+## Admission and retention
+
+Uploads reserve capacity before body buffering or image decoding: four active requests per server process, two per account, and 20 attempts per account per minute. Retry after a 429 response. Manual and automatic record posts share a ten-post-per-minute account budget. Excess automatic posts are suppressed; all valid records still save, and edits/retries do not publish suppressed posts later. Activity retains the newest 1,000 notifications per account. Push delivery reads bounded pages and attempts at most 100 deliveries per tick. See [SECURITY_ROLLOUT.md](SECURITY_ROLLOUT.md).

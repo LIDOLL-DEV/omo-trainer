@@ -1,3 +1,4 @@
+import {requireRewardAuthority} from './reward-authority.mjs';
 import {verifyWalletIdentity} from './coin-identity.mjs';
 export async function coinApi(database,login,request,response,route) { // Bearer-only external routes have explicit per-app CORS and never use browser session cookies.
   const send=(status,value)=>{response.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store',Vary:'Origin, Authorization'});response.end(JSON.stringify(value));};
@@ -25,14 +26,17 @@ export async function coinApi(database,login,request,response,route) { // Bearer
       if(input.grant_type!=='urn:ietf:params:oauth:grant-type:token-exchange'||input.subject_token_type!=='urn:ietf:params:oauth:token-type:access_token')throw Object.assign(Error('Use the OIDC access-token exchange grant.'),{status:400});
       const identity=await verifyWalletIdentity(input.subject_token,clientId);
       const participant=database.ensureParticipant(identity.issuer,identity.subject,identity.username);
+      const security=await login.checkIdentity?.(participant.id,true);
+      if(security&&identity.security_version!==security.version)throw Object.assign(Error('Identity changed during wallet sign-in.'),{status:401});
       const tokens=call('exchange',participant.id,clientId,identity.scope,input.subject_token);
       return send(200,{...tokens,identity:{issuer:identity.issuer,subject:identity.subject}});
     }
     const secret=/^Bearer ([A-Za-z0-9_-]+)$/.exec(request.headers.authorization??'')?.[1];
     const identity=call('grant',secret);
+    await login.checkIdentity?.(identity.owner);call('grant',secret);
     if(identity.client!==clientId)throw Object.assign(Error('Token belongs to another app.'),{status:403});
     if(request.method==='GET'&&route==='wallet')return send(200,call('balance',secret));
-    if(request.method==='POST'&&route==='operations')return send(200,call('operation',secret,input));
+    if(request.method==='POST'&&route==='operations'){requireRewardAuthority(clientId,secret,input,request.headers['x-reward-signature']);return send(200,call('operation',secret,input));}
     if(request.method==='POST'&&route==='revoke')return send(200,call('revoke',identity.owner,identity.id));
     return send(404,{error:'not_found',error_description:'Endpoint not found.'});
   }catch(error){send(error.status??500,{error:error.code??'request_failed',error_description:error.status?error.message:'Wallet request failed. Retry with the same request ID.'});}
