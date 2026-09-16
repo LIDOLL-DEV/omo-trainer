@@ -1,4 +1,5 @@
 import {requireRewardAuthority} from './reward-authority.mjs';
+import {questProxy} from './quest-proxy.mjs';
 ﻿import {cookie} from './login.mjs';
 const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fail=(status,message)=>{throw Object.assign(new Error(message),{status});};
@@ -54,6 +55,8 @@ export async function coinBrowserApi(database,login,request,response,route) { //
     }
     if(route==='session'&&request.method==='GET')return send(200,session);
     if(request.method==='POST'&&request.headers['x-csrf-token']!==session.csrf)fail(403,'Refresh your game connection before saving wallet changes.');
+    if(route==='zones'&&request.method==='GET')return send(200,await questProxy(secret,route,new URL(request.url,login.origin).searchParams));
+    if(route==='zones/action'&&request.method==='POST')return send(200,await questProxy(secret,route,null,input));
     if(route==='operations'&&request.method==='POST'){requireRewardAuthority('lidollquest',secret,input,request.headers['x-reward-signature']);return send(200,call('operation',secret,input));}
     if(route==='revoke'&&request.method==='POST') {
       const identity=call('grant',secret);call('revoke',identity.owner,identity.id);

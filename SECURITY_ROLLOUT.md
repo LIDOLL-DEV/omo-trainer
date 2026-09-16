@@ -91,3 +91,7 @@ identity reset/disable, signed status tampering, revoked tokens, upload admissio
 post fanout, activity retention, reward ceilings/restarts and signing configuration.
 `node tests/mommybot-diamonds-integration.mjs` checks the actual bot wallet client
 against a disposable tracker API without Discord or live wallets.
+
+## LiDollQuest arenas
+
+The compatible game now uses a standalone `lidollquest-server` process and database for the two hub arenas. Provision its own `lidollquest` reward key and set tracker `LIDOLLQUEST_API_URL`; deploy both services before the rebuilt game. Its README provides the systemd unit and setup commands. The tracker forwards authenticated zone calls but contains no arena rules or state. The remaining campaign uses local gold, with old uncertain generic operations retained for administrator reconciliation.

@@ -1,4 +1,5 @@
 import {requireRewardAuthority} from './reward-authority.mjs';
+import {questProxy} from './quest-proxy.mjs';
 import {verifyWalletIdentity} from './coin-identity.mjs';
 export async function coinApi(database,login,request,response,route) { // Bearer-only external routes have explicit per-app CORS and never use browser session cookies.
   const send=(status,value)=>{response.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store',Vary:'Origin, Authorization'});response.end(JSON.stringify(value));};
@@ -35,6 +36,8 @@ export async function coinApi(database,login,request,response,route) { // Bearer
     const identity=call('grant',secret);
     await login.checkIdentity?.(identity.owner);call('grant',secret);
     if(identity.client!==clientId)throw Object.assign(Error('Token belongs to another app.'),{status:403});
+    if(clientId==='lidollquest'&&request.method==='GET'&&route==='zones')return send(200,await questProxy(secret,route,url.searchParams));
+    if(clientId==='lidollquest'&&request.method==='POST'&&route==='zones/action')return send(200,await questProxy(secret,route,null,input));
     if(request.method==='GET'&&route==='wallet')return send(200,call('balance',secret));
     if(request.method==='POST'&&route==='operations'){requireRewardAuthority(clientId,secret,input,request.headers['x-reward-signature']);return send(200,call('operation',secret,input));}
     if(request.method==='POST'&&route==='revoke')return send(200,call('revoke',identity.owner,identity.id));

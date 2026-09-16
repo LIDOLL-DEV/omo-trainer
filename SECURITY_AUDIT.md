@@ -5,7 +5,7 @@ This is a source review with bounded, local reproductions against synthetic data
 No production endpoint, account, subscription or wallet was exercised. Application
 code was not changed during the initial audit. The findings below describe that
 original revision. Local remediation now covers findings 1-4 and the tracker/bot
-trust boundary in finding 5; LiDollQuest gameplay integration remains in progress.
+trust boundary in finding 5; LiDollQuest gameplay integration now uses the separate authoritative arena service.
 See [SECURITY_ROLLOUT.md](SECURITY_ROLLOUT.md) for rollout requirements and limits.
 These changes have not been deployed by this work.
 
@@ -184,4 +184,4 @@ on balances as resistant to deliberate manipulation.
 
 ## Remediation verification
 
-Local follow-up: 279 tracker tests pass, including signed identity revocation, malformed HTTP against both real services, upload admission, bounded auto-post fanout/activity retention, daily reward budgets and key provisioning. The actual MommyBot WalletClient passes credit/retry/debit/refund integration against a disposable tracker API; 66 focused bot tests pass. Browser sign-in, social and registration-gate checks passed against local services. Deployment and LiDollQuest gameplay integration remain outstanding.
+Local follow-up: 279 tracker tests pass, including signed identity revocation, malformed HTTP against both real services, upload admission, bounded auto-post fanout/activity retention, daily reward budgets and key provisioning. The actual MommyBot WalletClient passes credit/retry/debit/refund integration against a disposable tracker API; 66 focused bot tests pass. Browser sign-in, social and registration-gate checks passed against local services. Deployment remains outstanding. LiDollQuest now uses its own service for verified hub arenas, with the tracker acting only as its authenticated gateway and wallet.
