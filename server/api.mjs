@@ -57,9 +57,9 @@ export function createApi(database, login) { // Resolves each app session to an 
         if(route==='social/messages')return send(response,200,{participant,...database.social.messages(participant.id,query.get('participantId'),{before:query.get('before')})});
         if(route==='social/picture') {const picture=database.social.photo(participant.id,query.get('id'));response.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':picture.length,'Cache-Control':'no-store',Vary:'Cookie','X-Content-Type-Options':'nosniff','Cross-Origin-Resource-Policy':'same-origin'});response.end(picture);return;}
       }
-      if(request.method==='POST'&&['social/like','social/comments','social/comments/delete','social/report','social/activity/read'].includes(route)) {
+      if(request.method==='POST'&&['social/like','social/comments','social/comments/like','social/comments/delete','social/report','social/activity/read'].includes(route)) {
         const input=await body(request,16384);
-        const result=route==='social/like'?database.social.like(participant.id,input):route==='social/comments'?database.social.comment(participant.id,input):route==='social/comments/delete'?database.social.deleteComment(participant.id,input?.id):route==='social/report'?database.social.report(participant.id,input):database.activity.read(participant.id,input);
+        const result=route==='social/like'?database.social.like(participant.id,input):route==='social/comments'?database.social.comment(participant.id,input):route==='social/comments/like'?database.social.likeComment(participant.id,input):route==='social/comments/delete'?database.social.deleteComment(participant.id,input?.id):route==='social/report'?database.social.report(participant.id,input):database.activity.read(participant.id,input);
         return send(response,200,result);
       }
       if(route==='social/posts'&&request.method==='POST')return await database.social.upload(participant.id,async permit=>send(response,200,await database.social.publish(participant.id,await body(request,12*1024*1024),permit)));

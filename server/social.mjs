@@ -24,6 +24,9 @@ export function createSocial(db,friends,{now=Date.now,activity}={}) {
  CREATE TABLE IF NOT EXISTS friend_message_archives(friendship_id TEXT NOT NULL REFERENCES friendships(id) ON DELETE CASCADE,owner TEXT NOT NULL REFERENCES participants(id),through_seq INTEGER NOT NULL,PRIMARY KEY(friendship_id,owner));
  CREATE TABLE IF NOT EXISTS social_record_preferences(owner TEXT PRIMARY KEY REFERENCES participants(id),enabled INTEGER NOT NULL DEFAULT 0,audience TEXT NOT NULL CHECK(audience IN ('friends','public')),version INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS social_record_posts(owner TEXT NOT NULL,entry_id TEXT NOT NULL,post_id TEXT NOT NULL UNIQUE REFERENCES social_posts(id),PRIMARY KEY(owner,entry_id),FOREIGN KEY(owner,entry_id) REFERENCES entries(participant_id,id));`);
+ for(const column of ['parent_id','root_id'])if(!db.prepare('PRAGMA table_info(social_comments)').all().some(c=>c.name===column))db.exec('ALTER TABLE social_comments ADD COLUMN '+column+' TEXT'); // Existing comments stay top-level threads (NULL parent and root).
+ db.exec(`CREATE INDEX IF NOT EXISTS social_comment_root ON social_comments(root_id,seq);
+ CREATE TABLE IF NOT EXISTS social_comment_likes(comment_id TEXT NOT NULL REFERENCES social_comments(id),owner TEXT NOT NULL REFERENCES participants(id),created INTEGER NOT NULL,PRIMARY KEY(comment_id,owner));`); // One like per member per comment, mirroring post likes.
  const uploads=createUploadAdmission(db,{now});
  db.exec('CREATE INDEX IF NOT EXISTS social_post_rate ON social_posts(owner,created)');
  const postBudget=owner=>db.prepare('SELECT COUNT(*) AS n FROM social_posts WHERE owner=? AND created>?').get(owner,now()-60000).n<10;
@@ -119,7 +122,7 @@ export function createSocial(db,friends,{now=Date.now,activity}={}) {
   return {member:{...member,...avatarInfo(participantId),isSelf,isFriend},items:rows.slice(0,20).map(post=>serializePost(owner,post)),nextBefore:rows.length>20?rows[19].seq:null};
  } // Profiles reveal only identity and posts the current viewer can read; they never expose tracking records or account credentials.
  function photo(owner,id){requireUser(owner);const row=db.prepare('SELECT * FROM social_pictures WHERE id=?').get(key(id));if(!row)fail(404,'Picture not found.');postAccess(owner,row.post_id);return row.data;}
- function removePost(id){db.prepare('DELETE FROM social_pictures WHERE post_id=?').run(id);db.prepare("UPDATE social_posts SET body='',deleted=COALESCE(deleted,?) WHERE id=?").run(now(),id);db.prepare("UPDATE social_comments SET body='',deleted=COALESCE(deleted,?) WHERE post_id=?").run(now(),id);db.prepare('DELETE FROM social_likes WHERE post_id=?').run(id);withdrawPost(id);}
+ function removePost(id){db.prepare('DELETE FROM social_pictures WHERE post_id=?').run(id);db.prepare('DELETE FROM social_comment_likes WHERE comment_id IN (SELECT id FROM social_comments WHERE post_id=?)').run(id);db.prepare("UPDATE social_posts SET body='',deleted=COALESCE(deleted,?) WHERE id=?").run(now(),id);db.prepare("UPDATE social_comments SET body='',deleted=COALESCE(deleted,?) WHERE post_id=?").run(now(),id);db.prepare('DELETE FROM social_likes WHERE post_id=?').run(id);withdrawPost(id);}
  function deletePost(owner,id){requireUser(owner);return transaction(()=>{const row=db.prepare('SELECT id FROM social_posts WHERE id=? AND owner=?').get(key(id),owner);if(!row)fail(404,'Post not found.');removePost(id);return {removed:true};});} // Retain retry receipts after deletion so a lost response cannot resurrect content.
  function thread(owner,peer){requireUser(owner);key(peer);if(!friends.accepted(owner,peer))fail(403,'Messaging is available between accepted friends.');return db.prepare("SELECT id FROM friendships WHERE a=? AND b=? AND state='accepted'").get(...[owner,peer].sort()).id;}
  function conversations(owner) {
@@ -163,27 +166,54 @@ export function createSocial(db,friends,{now=Date.now,activity}={}) {
    return counts(owner,p.id);
   });
  } // A like is unique per member/post; explicit desired state makes retries safe and toggling cannot spam notifications.
- function commentList(owner,postId,{before}={}) {postAccess(owner,postId);return commentRows(postId,before);}
- function commentRows(postId,before) {
-  const rows=db.prepare('SELECT c.seq,c.id,c.post_id AS postId,c.owner,c.body,c.created,p.label FROM social_comments c JOIN participants p ON p.id=c.owner WHERE c.post_id=? AND c.deleted IS NULL AND c.seq<? AND NOT EXISTS(SELECT 1 FROM participant_access a WHERE a.participant_id=c.owner AND a.disabled=1) ORDER BY c.seq DESC LIMIT 31').all(postId,cursor(before));
-  return {items:rows.slice(0,30).reverse().map(({owner,label,...row})=>({...row,author:{id:owner,label,...avatarInfo(owner)}})),nextBefore:rows.length>30?rows[29].seq:null};
+ function commentList(owner,postId,{before}={}) {postAccess(owner,postId);return commentRows(owner,postId,before);}
+ const liveComment=alias=>`${alias}.deleted IS NULL AND NOT EXISTS(SELECT 1 FROM participant_access a WHERE a.participant_id=${alias}.owner AND a.disabled=1)`; // Removed comments and disabled authors are hidden everywhere.
+ function commentRows(viewer,postId,before) {
+  // Page by top-level threads; a removed root stays (as a placeholder) only while it still has visible replies.
+  const roots=db.prepare(`SELECT c.seq,c.id FROM social_comments c WHERE c.post_id=? AND c.parent_id IS NULL AND c.seq<? AND ((${liveComment('c')}) OR EXISTS(SELECT 1 FROM social_comments r WHERE r.root_id=c.id AND ${liveComment('r')})) ORDER BY c.seq DESC LIMIT 31`).all(postId,cursor(before));
+  const ids=JSON.stringify(roots.slice(0,30).map(r=>r.id));
+  // Load each root plus every reply in its thread, roots first, all oldest-first so the client can nest them.
+  const rows=db.prepare(`SELECT c.seq,c.id,c.post_id AS postId,c.parent_id AS parentId,c.owner,c.body,c.created,(${liveComment('c')}) AS visible,p.label,
+   (SELECT COUNT(*) FROM social_comment_likes l WHERE l.comment_id=c.id AND NOT EXISTS(SELECT 1 FROM participant_access a WHERE a.participant_id=l.owner AND a.disabled=1)) AS likes,
+   EXISTS(SELECT 1 FROM social_comment_likes l WHERE l.comment_id=c.id AND l.owner=?) AS liked
+   FROM social_comments c JOIN participants p ON p.id=c.owner WHERE c.post_id=? AND (c.id IN (SELECT value FROM json_each(?)) OR c.root_id IN (SELECT value FROM json_each(?)))
+   ORDER BY c.parent_id IS NOT NULL,c.seq LIMIT 1000`).all(viewer,postId,ids,ids);
+  const items=rows.map(({owner,label,visible,likes,liked,body,...row})=>visible?{...row,body,removed:false,likes,liked:Boolean(liked),author:{id:owner,label,...avatarInfo(owner)}}:{...row,body:'',removed:true,likes:0,liked:false,author:null}); // Placeholders never reveal who wrote removed text.
+  return {items,nextBefore:roots.length>30?roots[29].seq:null};
  }
+ function commentCounts(owner,id){return {likes:db.prepare('SELECT COUNT(*) AS n FROM social_comment_likes l WHERE comment_id=? AND NOT EXISTS(SELECT 1 FROM participant_access a WHERE a.participant_id=l.owner AND a.disabled=1)').get(id).n,liked:Boolean(db.prepare('SELECT 1 FROM social_comment_likes WHERE comment_id=? AND owner=?').get(id,owner))};}
  function comment(owner,input) {
-  requireContributor(owner);const requestId=key(input?.requestId),postId=key(input.postId),body=text(input.body,2000),fingerprint=hash({postId,body});
+  requireContributor(owner);const requestId=key(input?.requestId),postId=key(input.postId),parentId=input.parentId===undefined||input.parentId===null?null:key(input.parentId),body=text(input.body,2000);
+  const fingerprint=hash(parentId?{postId,parentId,body}:{postId,body}); // Top-level fingerprints keep their original shape so older retry receipts still match.
   return transaction(()=>{const p=postAccess(owner,postId),old=db.prepare('SELECT id,request_hash FROM social_comments WHERE owner=? AND request_id=?').get(owner,requestId);
    if(old){if(old.request_hash!==fingerprint)fail(409,'This request belongs to another comment.');return {id:old.id,repeated:true};}
    if(db.prepare('SELECT COUNT(*) AS n FROM social_comments WHERE owner=? AND created>?').get(owner,now()-60000).n>=20)fail(429,'Please wait a minute before commenting again.');
-   const id=randomUUID();db.prepare('INSERT INTO social_comments(id,post_id,owner,request_id,request_hash,body,created) VALUES (?,?,?,?,?,?,?)').run(id,postId,owner,requestId,fingerprint,body,now());
-   activity?.record(p.owner,{source:'comment:'+id,kind:'comment',actor:owner,postId,commentId:id,created:now()},true);return {id,repeated:false};
+   const parent=parentId?db.prepare(`SELECT c.id,c.owner,c.root_id FROM social_comments c WHERE c.id=? AND c.post_id=? AND ${liveComment('c')}`).get(parentId,postId):null; // Replies must target a visible comment on the same post.
+   if(parentId&&!parent)fail(404,'That comment is no longer available.');
+   const id=randomUUID(),instant=now();db.prepare('INSERT INTO social_comments(id,post_id,owner,request_id,request_hash,body,created,parent_id,root_id) VALUES (?,?,?,?,?,?,?,?,?)').run(id,postId,owner,requestId,fingerprint,body,instant,parentId,parent?(parent.root_id??parent.id):null);
+   if(parent)activity?.record(parent.owner,{source:'comment:'+id,kind:'reply',actor:owner,postId,commentId:id,created:instant},true); // Reply alert first, so a post owner replying-to gets "replied" rather than "commented".
+   activity?.record(p.owner,{source:'comment:'+id,kind:'comment',actor:owner,postId,commentId:id,created:instant},true); // Same source per owner: never two alerts for one comment.
+   return {id,repeated:false};
   });
- } // Comment access follows the parent audience, and its notification commits with the comment itself.
- function deleteComment(owner,id) {requireUser(owner);return transaction(()=>{const c=db.prepare('SELECT * FROM social_comments WHERE id=?').get(key(id));if(!c)fail(404,'Comment not found.');const p=postAccess(owner,c.post_id);if(c.owner!==owner&&p.owner!==owner)fail(403,'Only the comment author or post owner can remove this comment.');db.prepare("UPDATE social_comments SET body='',deleted=COALESCE(deleted,?) WHERE id=?").run(now(),id);withdrawPost(c.post_id,c.id);return {removed:true};});}
+ } // Comment access follows the parent audience, and its notifications commit with the comment itself.
+ function likeComment(owner,input) {
+  requireContributor(owner);if(typeof input?.liked!=='boolean')fail(400,'Choose like or unlike.');
+  return transaction(()=>{const c=db.prepare(`SELECT c.id,c.post_id,c.owner FROM social_comments c WHERE c.id=? AND ${liveComment('c')}`).get(key(input.commentId));if(!c)fail(404,'Comment not found.');postAccess(owner,c.post_id);
+   const source='comment-like:'+c.id+':'+owner;
+   if(input.liked){if(db.prepare('INSERT OR IGNORE INTO social_comment_likes VALUES (?,?,?)').run(c.id,owner,now()).changes)activity?.record(c.owner,{source,kind:'comment-like',actor:owner,postId:c.post_id,commentId:c.id,created:now()},true);}
+   else {db.prepare('DELETE FROM social_comment_likes WHERE comment_id=? AND owner=?').run(c.id,owner);const row=activity&&db.prepare('SELECT id FROM activity_notifications WHERE owner=? AND source=?').get(c.owner,source);if(row)activity.withdraw(row.id);}
+   return commentCounts(owner,c.id);
+  });
+ } // Same rules as post likes: explicit desired state, and re-liking never re-notifies.
+ function removeComment(c){db.prepare("UPDATE social_comments SET body='',deleted=COALESCE(deleted,?) WHERE id=?").run(now(),c.id);db.prepare('DELETE FROM social_comment_likes WHERE comment_id=?').run(c.id);withdrawPost(c.post_id,c.id);} // Replies stay; the removed comment becomes a placeholder in its thread.
+ function deleteComment(owner,id) {requireUser(owner);return transaction(()=>{const c=db.prepare('SELECT * FROM social_comments WHERE id=?').get(key(id));if(!c)fail(404,'Comment not found.');postAccess(owner,c.post_id);if(c.owner!==owner)fail(403,'Only the comment author can remove this comment.');removeComment(c);return {removed:true};});} // Post owners report unwanted comments instead of deleting them.
  function activityVisible(row) {
   if(row.kind==='message')return Boolean(db.prepare("SELECT 1 FROM friend_messages m JOIN friendships f ON f.id=m.friendship_id WHERE m.id=? AND m.sender=? AND m.sender<>? AND (f.a=? OR f.b=?) AND f.state='accepted' AND m.deleted IS NULL").get(row.message_id,row.actor,row.owner,row.owner,row.owner));
-  if(!['like','comment','friend-post'].includes(row.kind))return true;
+  if(!['like','comment','reply','comment-like','friend-post'].includes(row.kind))return true;
   try{postAccess(row.owner,row.post_id);postAccess(row.actor,row.post_id);}catch{return false;}
   if(row.kind==='friend-post')return friends.accepted(row.owner,row.actor);
   if(row.kind==='like')return Boolean(db.prepare('SELECT 1 FROM social_likes WHERE post_id=? AND owner=?').get(row.post_id,row.actor));
+  if(row.kind==='comment-like')return Boolean(db.prepare('SELECT 1 FROM social_comment_likes l JOIN social_comments c ON c.id=l.comment_id WHERE l.comment_id=? AND l.owner=? AND c.deleted IS NULL').get(row.comment_id,row.actor));
   return Boolean(db.prepare('SELECT 1 FROM social_comments WHERE id=? AND deleted IS NULL').get(row.comment_id));
  } // Stored notifications and queued pushes lose access when their underlying content or friendship is removed.
  function target(kind,id) {
@@ -200,7 +230,7 @@ export function createSocial(db,friends,{now=Date.now,activity}={}) {
  function moderation(owner,{view='reports',before,postId}={}) {
   requireAdmin(owner);
   if(view==='profiles'){const rows=db.prepare('SELECT s.seq,s.owner AS id,s.version AS avatarVersion,p.label FROM social_profiles s JOIN participants p ON p.id=s.owner WHERE s.data IS NOT NULL AND s.seq<? ORDER BY s.seq DESC LIMIT 31').all(cursor(before));return {items:rows.slice(0,30),nextBefore:rows.length>30?rows[29].seq:null};}
-  if(postId){const p=target('post',postId);if(!p||p.deleted)fail(404,'Post not found.');return {post:serializePost(owner,{...p,label:db.prepare('SELECT label FROM participants WHERE id=?').get(p.owner).label}),...commentRows(postId,before)};}
+  if(postId){const p=target('post',postId);if(!p||p.deleted)fail(404,'Post not found.');const thread=commentRows(owner,postId,before);return {post:serializePost(owner,{...p,label:db.prepare('SELECT label FROM participants WHERE id=?').get(p.owner).label}),...thread,items:thread.items.filter(c=>!c.removed)};} // Moderators review live comments (replies included), not placeholders.
   if(view==='restrictions')return {items:db.prepare('SELECT r.*,p.label FROM social_restrictions r JOIN participants p ON p.id=r.owner ORDER BY r.created DESC').all(),nextBefore:null};
   if(view==='posts'){const rows=db.prepare('SELECT p.*,u.label FROM social_posts p JOIN participants u ON u.id=p.owner WHERE p.deleted IS NULL AND p.seq<? ORDER BY p.seq DESC LIMIT 31').all(cursor(before));return {items:rows.slice(0,30).map(p=>serializePost(owner,p)),nextBefore:rows.length>30?rows[29].seq:null};}
   if(view!=='reports')fail(400,'Choose a moderation view.');
@@ -221,11 +251,11 @@ export function createSocial(db,friends,{now=Date.now,activity}={}) {
    else if(action==='remove') {
     const kind=input.kind;targetId=key(input.id);const item=target(kind,targetId);if(!item)fail(404,'Content not found.');
     if(kind==='message'&&!db.prepare("SELECT 1 FROM social_reports WHERE kind='message' AND target=?").get(targetId))fail(403,'A participant must report this private message before moderation.');
-    if(kind==='post'){removePost(targetId);db.prepare("UPDATE social_reports SET state='removed',resolution=? WHERE kind='comment' AND target IN (SELECT id FROM social_comments WHERE post_id=?) AND state='open'").run(reason,targetId);}else if(kind==='comment'){db.prepare("UPDATE social_comments SET body='',deleted=COALESCE(deleted,?) WHERE id=?").run(now(),targetId);withdrawPost(item.post_id,targetId);}else db.prepare("UPDATE friend_messages SET body='',deleted=COALESCE(deleted,?) WHERE id=?").run(now(),targetId);
+    if(kind==='post'){removePost(targetId);db.prepare("UPDATE social_reports SET state='removed',resolution=? WHERE kind='comment' AND target IN (SELECT id FROM social_comments WHERE post_id=?) AND state='open'").run(reason,targetId);}else if(kind==='comment')removeComment(item);else db.prepare("UPDATE friend_messages SET body='',deleted=COALESCE(deleted,?) WHERE id=?").run(now(),targetId);
     db.prepare("UPDATE social_reports SET state='removed',resolution=? WHERE kind=? AND target=? AND state='open'").run(reason,kind,targetId);
    }else fail(400,'Choose a moderation action.');
    db.prepare('INSERT INTO admin_audit VALUES (?,?,?,?,?,?)').run(randomUUID(),owner,'social-'+action,targetId,JSON.stringify({reason,kind:input.kind??null}),new Date(now()).toISOString());return {saved:true};
   });
  } // Require a reason and live admin role for every action; audit records contain decisions, not private content copies.
- return {upload:uploads.run,publish,feed,post,photo,deletePost,unreadMessages,conversations,messages,sendMessage,readMessages,deleteMessage,archiveMessages,like,comment,commentList,deleteComment,report,moderation,moderationPhoto,moderate,activityVisible,profile,saveProfile,avatar,avatarInfo,memberProfile,recordPreferences,saveRecordPreferences,syncRecordPost};
+ return {upload:uploads.run,publish,feed,post,photo,deletePost,unreadMessages,conversations,messages,sendMessage,readMessages,deleteMessage,archiveMessages,like,comment,commentList,likeComment,deleteComment,report,moderation,moderationPhoto,moderate,activityVisible,profile,saveProfile,avatar,avatarInfo,memberProfile,recordPreferences,saveRecordPreferences,syncRecordPost};
 }

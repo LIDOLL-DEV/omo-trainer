@@ -134,8 +134,13 @@ Use **Run and share with MommyBot** to request an on-demand report for the bot's
   deletes your conversation for both people. See [SOCIAL_GUIDE.md](SOCIAL_GUIDE.md).
 
 
-- Like posts and open Comments to join the conversation. Use Report on a post,
-  comment or received message to ask administrators to review it.
+- Like posts and comments, and open Comments to join the conversation. Choose
+  **Reply** under a comment to answer it in a thread.
+- Delete your own comments with **Delete**. You can't delete other people's
+  comments on your posts; use **Report** instead.
+- Use a post's **Options ▾** menu (under its Friends/Public label) to delete your
+  own post or report someone else's. Use Report on a comment or received
+  message to ask administrators to review it.
 - Open Activity for stored notifications, unread counts and links to posts.
   Mark individual items or all current notifications as read.
 - In notification settings, uncheck Likes on my posts, Comments on my posts or

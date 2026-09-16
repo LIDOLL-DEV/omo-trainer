@@ -262,6 +262,15 @@ read state, quiet hours, opt-outs, disabled accounts, revoked audiences, expired
 endpoints and push click routing. Run `node tests/social-activity-browser.mjs`
 for real likes/comments, report submission, activity links/read state, admin
 removal/restriction/restoration/dismissal, reported messages and role revocation.
+The threaded-comments unit test covers replies (retries, wrong-post and
+missing parents), one owner alert per comment, reply and comment-like alerts,
+comment-like privacy, author-only deletion, removed-parent placeholders and
+post deletion. Run `node tests/comment-threads-browser.mjs` (needs
+`PUPPETEER_MODULE` and `CHROME_PATH`) to check the post **Options** dropdown
+(Delete for owners, Report for others; outside click and Escape close it),
+nested reply boxes, comment likes, the missing Delete on other members'
+comments, removed-comment placeholders, activity alerts and 320/390/1024px
+layouts in both themes. Screenshots land in `artifacts/`.
 `tests/notifications-browser.mjs` verifies all three default-on social settings
 and opt-outs across reloads/devices. Push tests use mocked transport; production
 Web Push delivery still requires a subscribed device.

@@ -188,6 +188,12 @@ initial migration; never reset saved opt-outs. Check live audiences at read and
 delivery time, and keep withdrawn notification receipts to prevent replay.
 Admin social moderation requires a current role, CSRF and a reason; only
 reported private messages are reviewable. See SOCIAL_GUIDE.md for endpoints.
+Comment threads: replies store `parent_id` (direct parent) and `root_id` (top
+comment), so one query loads a page of threads. Only authors delete comments;
+removal goes through `removeComment()` so likes and alerts go with it. Removed
+comments with visible replies are returned as author-less placeholders; never
+add author or body data to them. Reply alerts are recorded before the post
+owner's comment alert so the shared `comment:<id>` source gives one alert each.
 
 Activity filters community-checkin entries by the recipient's current saved
 community_support preference. Apply that filter before pagination and unread

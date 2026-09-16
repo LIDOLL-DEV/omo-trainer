@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
-const preferences={like:'social_likes',comment:'social_comments','friend-post':'friend_posts',message:'direct_messages'};
+const preferences={like:'social_likes','comment-like':'social_likes',comment:'social_comments',reply:'social_comments','friend-post':'friend_posts',message:'direct_messages'}; // Comment likes and replies reuse the existing Likes/Comments push opt-outs.
+const socialText={like:['New like',' liked your post.'],'comment-like':['New like',' liked your comment.'],comment:['New comment',' commented on your post.'],reply:['New reply',' replied to your comment.'],'friend-post':['A friend posted',' shared a new post.']}; // Title and action suffix for each social kind.
 const recordPreferences={wetting:'friend_wettings','diaper-change':'friend_changes',observation:'friend_liquids'};
 export function createActivity(db,{canSee=()=>true,now=Date.now}={}) {
  db.exec(`CREATE TABLE IF NOT EXISTS activity_notifications(seq INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT NOT NULL UNIQUE,owner TEXT NOT NULL REFERENCES participants(id),source TEXT NOT NULL,kind TEXT NOT NULL,actor TEXT,post_id TEXT,comment_id TEXT,title TEXT NOT NULL,body TEXT NOT NULL,created INTEGER NOT NULL,read_at INTEGER,withdrawn INTEGER NOT NULL DEFAULT 0,UNIQUE(owner,source));
@@ -41,7 +42,7 @@ export function createActivity(db,{canSee=()=>true,now=Date.now}={}) {
   if(!preferences[row.kind])return {title:row.title,body:row.body};
   const label=String(db.prepare('SELECT label FROM participants WHERE id=?').get(row.actor)?.label??'A member').replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g,'').trim().slice(0,80)||'A member';
   if(row.kind==='message')return {title:'New message',body:label+' sent you a message.'};
-  return {title:row.kind==='like'?'New like':row.kind==='comment'?'New comment':'A friend posted',body:label+(row.kind==='like'?' liked your post.':row.kind==='comment'?' commented on your post.':' shared a new post.')};
+  const [title,suffix]=socialText[row.kind];return {title,body:label+suffix};
  } // Social pushes contain an actor name and action, never private post text or pictures.
  function list(owner,{before}={}) {
   requireUser(owner);const cursor=before===undefined||before===null?Number.MAX_SAFE_INTEGER:Number(before);if(!Number.isSafeInteger(cursor)||cursor<1)fail(400,'Invalid activity page.');prune(owner);

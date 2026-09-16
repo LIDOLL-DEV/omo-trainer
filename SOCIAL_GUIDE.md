@@ -109,14 +109,32 @@ available, and the recipient's own timeline-sharing choice is unchanged.
 
 ## Likes, comments and reports
 
-Use **Like** or **Unlike** on an accessible post. Each member has at most one
-like per post. Open **Comments** to read or write comments, up to 2,000
-characters each. Comments show 30 per page; new comments are limited to 20 per
-minute per member. Both the comment author and the post owner can delete a
-comment. Likes and comments follow the post's Friends/Public audience, and
-removing the post removes its pictures, likes and comments too.
+Posts and comments use a compact, FetLife-style layout: small text-link
+actions (**♡ Like · Reply · Report**), relative times ("3 hours ago", with the
+exact time on hover) and indented reply threads.
 
-Choose **Report post**, **Report comment** or **Report message** and provide a
+Use **Like** (or **Liked** to undo) on an accessible post or comment. Each member
+has at most one like per post and per comment. Open **Comments** to read or write
+comments, up to 2,000 characters each. Choose **Reply** under any comment to
+answer it directly; replies nest under their parent, and the indentation stops
+growing after three levels so threads stay readable on phones. Only one reply
+box is open per post, and **Cancel** closes it. Comments show 30 top-level
+threads per page, each with all of its replies; new comments and replies share
+the limit of 20 per minute per member.
+
+Only a comment's author can delete it. Post owners can no longer remove other
+members' comments; they can **Report** them instead. Deleting a comment that has
+replies leaves a **Comment removed** placeholder (without the author's name) so
+the replies keep their place; a thread disappears once nothing visible remains.
+Deleting a comment also removes its likes and withdraws its notifications.
+Likes, comments and replies follow the post's Friends/Public audience, and
+removing the post removes its pictures, likes, comments and comment likes too.
+
+Each post has an **Options ▾** dropdown directly under its Friends/Public label.
+It holds **Delete post** on your own posts and **Report post** on everyone
+else's. It closes when you choose an item, click elsewhere or press Escape.
+
+Choose **Report post** (in Options), **Report** on a comment or **Report message** and provide a
 reason to ask administrators to review content. Reports are visible only to
 administrators, with the reporter's identity. A repeated report from the same
 member on the same item does not duplicate the queue; reporting is limited to
@@ -125,7 +143,8 @@ administrators, not the rest of the conversation.
 
 ## Activity and social push notifications
 
-**Notifications** (the activity feed) stores likes and comments on your posts and new posts by your
+**Notifications** (the activity feed) stores likes and comments on your posts,
+likes on your comments, replies to your comments, and new posts by your
 accepted friends, whether or not you have push enabled. Self-likes/comments do
 not notify you. New admin announcements and community check-in notices are also
 saved when their first delivery is attempted, and selected potty reminders are
@@ -146,6 +165,9 @@ withdrawn notifications. Read status is separate from push delivery status.
 
 Settings > Receive notifications has three independent account-wide options:
 **Likes on my posts**, **Comments on my posts**, and **New posts from friends**.
+Likes on your comments follow the Likes setting, and replies to your comments
+follow the Comments setting. When someone replies to the post owner's own
+comment, the owner gets a single "replied to your comment" alert, not two.
 They default on for first-time notification enables and are enabled once for
 existing notification subscribers by the database column migration. Later
 opt-outs survive restarts, re-enabling and adding devices. Uncheck and save to
@@ -203,9 +225,10 @@ token. Responses, including picture bytes, use `Cache-Control: no-store`.
 | `messages/delete` | POST | Sender-owned message `id`; clears message text |
 | `post` | GET | Post `id`; one post with current audience checks |
 | `like` | POST | `postId`, boolean `liked`; current counts and viewer like state |
-| `comments` | GET | `postId`, optional `before`; chronological `items`, `nextBefore` |
-| `comments` | POST | `requestId`, `postId`, `body`; retry-safe comment ID |
-| `comments/delete` | POST | Comment `id`; author or post owner only |
+| `comments` | GET | `postId`, optional `before`; `items` = up to 30 top-level threads plus all their replies (roots first, then oldest-first), each with `parentId`, `likes`, `liked` and `removed` (placeholders have empty `body` and `author: null`); `nextBefore` pages threads |
+| `comments` | POST | `requestId`, `postId`, `body`, optional `parentId` (a visible comment on the same post); retry-safe comment ID |
+| `comments/like` | POST | `commentId`, boolean `liked`; current comment `likes` and `liked` |
+| `comments/delete` | POST | Comment `id`; comment author only |
 | `report` | POST | `kind: post/comment/message`, `id`, `reason` |
 | `activity` | GET | Optional `before`; `items`, `unread`, `latest`, `nextBefore`, participant and CSRF |
 | `activity/read` | POST | Notification `id` or last loaded `through` sequence |
@@ -224,6 +247,13 @@ and conversations. Picture decoding finishes before acquiring the SQLite write
 lock; access and duplicate checks run again inside the publishing transaction.
 
 ## Deployment and checks
+
+Threaded comments add `parent_id` and `root_id` columns to `social_comments`
+(added automatically at startup; existing comments become top-level threads)
+and a new `social_comment_likes` table. Deploy `server/social.mjs`,
+`server/activity.mjs`, `server/api.mjs`, `lib/social.js`, `styles.css` and
+`sw.js` (cache `little-log-v103-threaded-comments`) together. Back up
+`little-log.sqlite` first, as always.
 
 Deploy the backend, HTML, styles, `lib/social.js`, service worker and updated npm
 lockfile together. Install the pinned `sharp` dependency with `npm ci`. Tables

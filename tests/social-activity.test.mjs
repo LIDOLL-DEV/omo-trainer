@@ -37,10 +37,40 @@ test('public interactions allow nonfriends; comments enforce ownership, input li
   const p=await db.social.publish(a.id,post('public',{audience:'public'}));db.social.like(c.id,{postId:p.id,liked:true});
   const first=db.social.comment(c.id,{requestId:'first',postId:p.id,body:'First'});for(let i=0;i<32;i++){advance();db.social.comment(b.id,{requestId:'page'+i,postId:p.id,body:'Page '+i});}
   const page=db.social.commentList(c.id,p.id),older=db.social.commentList(c.id,p.id,{before:page.nextBefore});assert.equal(page.items.length,30);assert.equal(older.items.length,3);assert.equal(older.items[0].id,first.id);
-  assert.throws(()=>db.social.deleteComment(b.id,first.id),e=>e.status===403);db.social.deleteComment(a.id,first.id);assert.equal(db.social.post(a.id,p.id).comments,32);
+  assert.throws(()=>db.social.deleteComment(b.id,first.id),e=>e.status===403);assert.throws(()=>db.social.deleteComment(a.id,first.id),e=>e.status===403,'Post owners cannot delete other members\' comments');
+  db.social.deleteComment(c.id,first.id);assert.equal(db.social.post(a.id,p.id).comments,32);
   assert.equal(db.social.comment(c.id,{requestId:'first',postId:p.id,body:'First'}).id,first.id);assert.equal(db.social.post(a.id,p.id).comments,32);
   for(const body of ['',null,'a'.repeat(2001)])assert.throws(()=>db.social.comment(c.id,{requestId:'invalid',postId:p.id,body}),e=>e.status===400);
   assert.throws(()=>db.social.like(c.id,{postId:p.id,liked:'true'}),e=>e.status===400);
+ }finally{db.close();}
+});
+
+test('threaded replies and comment likes notify the right members, survive parent removal and respect audiences',async()=>{
+ const {db,a,b,c,sent}=fixture();try{
+  db.notifications.save(a.id,pref('a'));db.notifications.save(b.id,pref('b'));
+  const p=await db.social.publish(a.id,post('thread'));await db.notifications.tick(instant);sent.length=0;
+  const root=db.social.comment(b.id,{requestId:'root',postId:p.id,body:'Root comment'});
+  const reply=db.social.comment(a.id,{requestId:'reply',postId:p.id,parentId:root.id,body:'Owner reply'});
+  const nested=db.social.comment(b.id,{requestId:'nested',postId:p.id,parentId:reply.id,body:'Nested reply'});
+  assert.equal(db.social.comment(a.id,{requestId:'reply',postId:p.id,parentId:root.id,body:'Owner reply'}).id,reply.id,'Reply retries are idempotent');
+  assert.throws(()=>db.social.comment(a.id,{requestId:'reply',postId:p.id,body:'Owner reply'}),e=>e.status===409,'A retry cannot change its parent');
+  assert.throws(()=>db.social.comment(b.id,{requestId:'bad-parent',postId:p.id,parentId:'missing',body:'x'}),e=>e.status===404);
+  const other=await db.social.publish(a.id,post('other'));assert.throws(()=>db.social.comment(b.id,{requestId:'cross',postId:other.id,parentId:root.id,body:'x'}),e=>e.status===404,'Replies stay on the parent post');
+  const kinds=owner=>db.activity.list(owner).items.map(i=>i.body);
+  assert.ok(kinds(b.id).includes('Alice replied to your comment.'));assert.ok(kinds(a.id).includes('Bob replied to your comment.'));assert.equal(kinds(a.id).filter(t=>t==='Bob commented on your post.').length,1,'Owner gets one alert per comment');
+  let thread=db.social.commentList(b.id,p.id);assert.deepEqual(thread.items.map(i=>[i.id,i.parentId]),[[root.id,null],[reply.id,root.id],[nested.id,reply.id]]);
+  assert.deepEqual(db.social.likeComment(a.id,{commentId:root.id,liked:true}),{likes:1,liked:true});db.social.likeComment(a.id,{commentId:root.id,liked:true});
+  assert.equal(db.social.commentList(b.id,p.id).items[0].likes,1);assert.equal(db.social.commentList(b.id,p.id).items[0].liked,false);assert.ok(kinds(b.id).includes('Alice liked your comment.'));
+  db.social.likeComment(a.id,{commentId:root.id,liked:false});db.social.likeComment(a.id,{commentId:root.id,liked:true});assert.equal(kinds(b.id).filter(t=>t==='Alice liked your comment.').length,0,'Unliking withdraws the alert and re-liking never repeats it');db.social.likeComment(b.id,{commentId:reply.id,liked:true});assert.ok(kinds(a.id).includes('Bob liked your comment.'));
+  assert.throws(()=>db.social.likeComment(c.id,{commentId:root.id,liked:true}),e=>e.status===404,'Friends-only comments stay private');
+  assert.throws(()=>db.social.likeComment(a.id,{commentId:root.id,liked:'yes'}),e=>e.status===400);
+  await db.notifications.tick(instant);assert.ok(sent.every(({p})=>!p.body.includes('Root')&&!p.body.includes('reply ')));
+  db.social.deleteComment(b.id,root.id);thread=db.social.commentList(a.id,p.id);assert.equal(thread.items[0].removed,true);assert.equal(thread.items[0].author,null);assert.equal(thread.items[0].body,'');assert.equal(thread.items.length,3,'Replies keep their removed parent as a placeholder');
+  assert.equal(db.social.post(a.id,p.id).comments,2);
+  assert.throws(()=>db.social.comment(a.id,{requestId:'to-removed',postId:p.id,parentId:root.id,body:'x'}),e=>e.status===404);
+  db.social.deleteComment(a.id,reply.id);assert.ok(!kinds(a.id).includes('Bob liked your comment.'),'Removing a comment withdraws its like alerts');db.social.deleteComment(b.id,nested.id);assert.equal(db.social.commentList(a.id,p.id).items.length,0,'Fully removed threads disappear');
+  const admin=db.social.moderation(db.ensureParticipant('test','admin','Admin').id,{postId:p.id});assert.equal(admin.items.length,0);
+  db.social.deletePost(a.id,p.id);assert.equal(db.activity.list(b.id).items.filter(i=>i.postId===p.id).length,0);
  }finally{db.close();}
 });
 
