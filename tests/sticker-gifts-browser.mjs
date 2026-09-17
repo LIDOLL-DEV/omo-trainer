@@ -52,6 +52,14 @@ try{
  // Bob sees the sticker in his conversation.
  await b.setViewport({width:1024,height:900});await open(b,'#messages');await b.waitForSelector(`#message-friend option[value="${alice.id}"]`);await b.select('#message-friend',alice.id);
  await b.waitForFunction(()=>document.querySelector('.message-bubble .social-sticker figcaption')?.textContent.startsWith('🎁'));
+ // Phone layout: Bob (who now owns 2 stickers) opens the thread and the picker at 412px.
+ await b.setViewport({width:412,height:915,isMobile:true,hasTouch:true});await open(b,'#messages');await b.waitForSelector('#conversation-list .conversation-button');await tap(b,'#conversation-list .conversation-button');
+ await b.waitForSelector('.message-bubble .social-sticker');await tap(b,'#page-messages .sticker-picker .link-action');await b.waitForSelector('#page-messages .sticker-choice');
+ const layout=await b.evaluate(()=>{const box=s=>document.querySelector(s).getBoundingClientRect(),text=box('#message-text'),send=box('#message-send'),picker=box('#page-messages .sticker-picker'),form=box('#message-form'),grid=document.querySelector('#page-messages .sticker-choices'),tops=[...grid.children].map(n=>Math.round(n.getBoundingClientRect().top)),bubble=[...document.querySelectorAll('.message-bubble')].find(n=>n.querySelector('.social-sticker')),name=bubble.querySelector('.social-identity,strong').getBoundingClientRect(),sticker=bubble.querySelector('.social-sticker').getBoundingClientRect();
+  return {sendBesideText:send.left>=text.right&&send.top<text.bottom,pickerBelow:picker.top>=text.bottom,pickerFullWidth:Math.abs(picker.width-form.width)<2,oneRow:new Set(tops).size===1,noPageOverflow:document.documentElement.scrollWidth<=innerWidth,stickerUnderName:sticker.top>=name.bottom-1};});
+ assert.deepEqual(layout,{sendBesideText:true,pickerBelow:true,pickerFullWidth:true,oneRow:true,noPageOverflow:true,stickerUnderName:true});
+ await b.screenshot({path:resolve(directory,'message-picker-412.png')});
+ await tap(b,'#page-messages .sticker-choice');await b.waitForSelector('#page-messages .sticker-chosen .social-sticker');await b.screenshot({path:resolve(directory,'message-chosen-412.png')});
  assert.deepEqual(errors,[]);
  console.log('PASS: own-post picker hidden, sticker picker counts, sticker-only comment, optional text, picker reset, sticker message, empty inventory notice and recipient view. Screenshots: '+directory);
 }finally{await browser?.close();db.close();server.closeAllConnections();await new Promise(r=>server.close(r));}

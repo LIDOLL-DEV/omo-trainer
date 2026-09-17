@@ -211,7 +211,8 @@ Your earned stickers can be sent as gifts. Choose **🎁 Add sticker** under a
 comment box, reply box or message box, then tap a sticker from your collection.
 The picker shows only stickers you have available (stickers reserved in open
 market listings are not offered). Text is optional once a sticker is attached;
-**Remove sticker** takes it off again. Sending the comment, reply or message
+**Remove sticker** takes it off again. On phones the stickers show as one row you
+swipe sideways, below the message box so **Send message** stays beside it. Sending the comment, reply or message
 moves **one** of that sticker from your collection into the other person's
 collection:
 
@@ -344,7 +345,8 @@ lock; access and duplicate checks run again inside the publishing transaction.
 
 The feed **Show** filter needs no database changes; deploy `server/social.mjs`,
 `server/api.mjs`, `lib/social.js`, `index.html`, `styles.css` and `sw.js`
-(cache `little-log-v110-feed-filter`) together.
+together (the phone sticker-picker layout fix ships with cache
+`little-log-v111-sticker-mobile`).
 
 Roll posts add `rolls` to `social_record_preferences`, `hold_streak` to
 `social_record_posts` and `friend_rolls` (default on) to

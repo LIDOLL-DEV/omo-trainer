@@ -1963,7 +1963,25 @@ html.photo-viewing { overflow:hidden; }
 .social-sticker img { width:120px;height:90px;object-fit:contain; }
 .social-sticker figcaption { font-size:11px;color:var(--muted); }
 .social-comment > .social-sticker { margin-left:38px; } /* line up with the comment text */
-@media (max-width:680px) { .social-comment > .social-sticker { margin-left:0; } }
+@media (max-width:680px) {
+ .social-comment > .social-sticker { margin-left:0; }
+ .sticker-choices { display:flex;gap:6px;max-height:none;overflow-x:auto;overflow-y:hidden;padding-bottom:4px;scroll-snap-type:x proximity;overscroll-behavior-x:contain; } /* phones: one swipeable row instead of a tall grid */
+ .sticker-choice { flex:0 0 76px;padding:4px;scroll-snap-align:start; }
+ .sticker-choice .social-sticker { margin:0;width:100%; }
+ .sticker-choice .social-sticker img,.sticker-chosen .social-sticker img { width:52px;height:40px; }
+ .sticker-choice figcaption { max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px; } /* long names shrink to one line */
+ .sticker-choice small { font-size:10px;font-weight:700; }
+ .sticker-chosen { gap:4px 10px; }
+ .sticker-chosen .social-sticker { margin:0; }
+ .sticker-chosen .field-help { flex:1 1 140px;margin:0;font-size:11px; }
+ #page-messages #message-form #message-text { grid-column:1;grid-row:1; } /* text box and Send share the first row... */
+ #page-messages #message-form #message-send { grid-column:2;grid-row:1; }
+ #page-messages #message-form .sticker-picker { grid-column:1 / -1;grid-row:2;margin:0;min-width:0; } /* ...and the sticker picker gets its own full-width row */
+ #page-messages #message-form .sticker-picker .link-action { min-height:28px;font-size:12px; }
+ #page-messages .message-help { grid-row:3; }
+ #page-messages .message-bubble > .social-sticker img { width:96px;height:72px; }
+}
+.message-bubble > .social-sticker { display:flex;width:fit-content;margin:6px 0; } /* sticker gets its own line under the sender's name */
 .comment-removed { margin:4px 0;color:var(--muted);font-size:12px;font-style:italic; }
 .reply-form { margin-top:8px; }
 .social-comments .reply-form textarea { min-height:60px; }

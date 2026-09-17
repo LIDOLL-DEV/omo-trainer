@@ -145,7 +145,9 @@ immediate returns after a failed save and the reconciler's settle/return/kept
 paths. With `PUPPETEER_MODULE` and `CHROME_PATH` set, run
 `node tests/sticker-gifts-browser.mjs` to click through the real picker: hidden
 on your own post, counts, a sticker-only comment, a text + sticker message, the
-empty-inventory notice and the recipient's view. Screenshots are saved under
+empty-inventory notice and the recipient's view, then checks the 412px phone
+layout (Send beside the message box, full-width picker below it, a single
+swipeable row of stickers, and the sent sticker on its own line). Screenshots are saved under
 `artifacts/sticker-gifts-browser-*`.
 
 `tests/message-badge-browser.mjs` checks the main and Social unread badges,
