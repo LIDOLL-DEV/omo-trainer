@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
 const preferences={like:'social_likes','comment-like':'social_likes',comment:'social_comments',reply:'social_comments','friend-post':'friend_posts',message:'direct_messages'}; // Comment likes and replies reuse the existing Likes/Comments push opt-outs.
 const socialText={like:['New like',' liked your post.'],'comment-like':['New like',' liked your comment.'],comment:['New comment',' commented on your post.'],reply:['New reply',' replied to your comment.'],'friend-post':['A friend posted',' shared a new post.']}; // Title and action suffix for each social kind.
-const recordPreferences={wetting:'friend_wettings','diaper-change':'friend_changes',observation:'friend_liquids'};
+const recordPreferences={wetting:'friend_wettings','diaper-change':'friend_changes',observation:'friend_liquids',roll:'friend_rolls'}; // Each automatic record type has its own push opt-out.
 export function createActivity(db,{canSee=()=>true,now=Date.now}={}) {
  db.exec(`CREATE TABLE IF NOT EXISTS activity_notifications(seq INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT NOT NULL UNIQUE,owner TEXT NOT NULL REFERENCES participants(id),source TEXT NOT NULL,kind TEXT NOT NULL,actor TEXT,post_id TEXT,comment_id TEXT,title TEXT NOT NULL,body TEXT NOT NULL,created INTEGER NOT NULL,read_at INTEGER,withdrawn INTEGER NOT NULL DEFAULT 0,UNIQUE(owner,source));
  CREATE INDEX IF NOT EXISTS activity_owner ON activity_notifications(owner,seq);

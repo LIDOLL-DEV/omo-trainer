@@ -49,13 +49,34 @@ function updateNavigationLayout() { // Moves the same links between the desktop 
 }
 mobileNavigation.addEventListener('change',updateNavigationLayout);
 updateNavigationLayout();
-$('#menu-toggle').addEventListener('click',()=>{
-  if(!mobileNavigation.matches)return;
-  if(navigationDrawer.open){closeNavigation();return;}
+function openNavigation() { // Shared by the Menu button and the edge swipe; phones only, where the drawer exists.
+  if(!mobileNavigation.matches||navigationDrawer.open)return;
   navigationDrawer.showModal();
   $('#menu-toggle').setAttribute('aria-expanded','true');
   document.documentElement.classList.add('navigation-open');
+}
+$('#menu-toggle').addEventListener('click',()=>{
+  if(navigationDrawer.open){closeNavigation();return;}
+  openNavigation();
 });
+const EDGE=40,SWIPE=60; // Start within 40px of the left edge (a little past the system back-gesture strip); slide at least 60px to act.
+let swipe=null; // {x,y,open}: where the current one-finger swipe began and whether the drawer was open then.
+document.addEventListener('touchstart',event=>{ // Passive listeners keep normal scrolling smooth; we never block the browser's own gestures.
+  swipe=null;
+  if(!mobileNavigation.matches||event.touches.length!==1)return;
+  const {clientX:x,clientY:y}=event.touches[0];
+  if(navigationDrawer.open)swipe={x,y,open:true}; // Any swipe on the open drawer or its backdrop can close it.
+  else if(x<=EDGE&&!document.querySelector('dialog[open]'))swipe={x,y,open:false}; // Never open over another dialog (market, photo viewer...).
+},{passive:true});
+document.addEventListener('touchmove',event=>{
+  if(!swipe||event.touches.length!==1)return;
+  const dx=event.touches[0].clientX-swipe.x,dy=event.touches[0].clientY-swipe.y;
+  if(Math.hypot(dx,dy)<10)return; // Ignore the first small wobble before judging direction.
+  if(Math.abs(dy)>Math.abs(dx)){swipe=null;return;} // Mostly vertical: this is a scroll, not a menu swipe.
+  if(!swipe.open&&dx>=SWIPE){swipe=null;openNavigation();}
+  else if(swipe.open&&dx<=-SWIPE){swipe=null;closeNavigation();}
+},{passive:true});
+document.addEventListener('touchend',()=>{swipe=null;},{passive:true});document.addEventListener('touchcancel',()=>{swipe=null;},{passive:true}); // Lifting the finger early cancels.
 $('#menu-close').addEventListener('click',closeNavigation);
 navigationDrawer.addEventListener('keydown',event=>{ // Wrap keyboard traversal inside the drawer, including its first and last links.
   if(event.key!=='Tab')return;
@@ -99,28 +120,6 @@ let recordReward = null; // Only the currently open save celebration may receive
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 const rewardCelebration=createRewardCelebration($('#observation-reward-dialog'),$('#reward-confetti'),$('#reward-sound'),reducedMotion);
-let crtPreference = null;
-try { crtPreference = localStorage.getItem('ldq-crt-effect'); } catch { /* The display still works when browser storage is unavailable. */ }
-
-function renderCrt() { // Matches the main site's saved display preference and always respects reduced motion.
-  const defaultCrt=document.documentElement.dataset.theme==='caregiver-tracker'?'on':'off';
-  const enabled = (crtPreference??defaultCrt) !== 'off' && !reducedMotion.matches;
-  document.documentElement.classList.toggle('crt-enabled', enabled);
-  $('#crt-toggle').setAttribute('aria-pressed', String(enabled));
-  $('#crt-toggle').textContent = `CRT FX // ${enabled ? 'ON' : 'OFF'}`;
-  $('#crt-toggle').disabled = reducedMotion.matches;
-  $('#crt-toggle').title = reducedMotion.matches ? 'CRT texture is disabled by your reduced-motion preference.' : 'Toggle the static terminal scanline texture.';
-}
-
-$('#crt-toggle').addEventListener('click', () => { // Saves a cosmetic preference separately from observation records and their sync queue.
-  crtPreference = document.documentElement.classList.contains('crt-enabled') ? 'off' : 'on';
-  renderCrt();
-  try { localStorage.setItem('ldq-crt-effect', crtPreference); }
-  catch { notify('Display changed for this visit. Your browser could not save the preference.'); }
-});
-window.addEventListener('little-log-theme-changed',renderCrt);
-reducedMotion.addEventListener('change', renderCrt);
-renderCrt();
 
 function notify(message) { // Announces feedback without moving focus away from the user's current control.
   $('#toast').textContent = message;

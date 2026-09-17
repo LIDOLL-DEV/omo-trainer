@@ -88,7 +88,7 @@ independently of push notifications and Community support, across devices.
 New wettings (including accidents, bedwetting and used-the-potty records) and
 diaper changes and water/liquid logs create short timeline posts when first synced. Posts contain the
 classification and recorded time; diaper changes also include the final wetting
-count; water/liquid logs include the intake amount in mL. Rolls, position and diaper numbers are not posted. Already-synced
+count; water/liquid logs include the intake amount in mL. Position and diaper numbers are not posted. Already-synced
 records are not backfilled; offline and backdated records first synced while
 enabled do post. Administrator imports never create new posts.
 
@@ -114,6 +114,29 @@ wettingsCount?, occurredAt}` for automatic ones. It contains only what the
 summary text already shares (never position or diaper numbers). The stored
 `body` summary is unchanged, so older app versions still show it as text.
 
+### Posting rolls
+
+Rolls have their own checkbox, **Automatically post my rolls**, in the same
+Settings card. It is off for everyone and works independently of the bathroom
+and water log checkbox; both use the audience chosen there. Each new roll that
+syncs becomes a timeline post showing:
+
+| Shown | Example |
+| --- | --- |
+| Result and chance | 🎲 **Alice** rolled HOLD and held it! (25% chance) / rolled PEE and had to go (50% chance) |
+| Mode (always shown) | **🔥 Desperation mode** or **Normal mode** chip |
+| Hold streak | **3 holds in a row** on a hold (this roll included); **after 3 holds in a row** on a pee (no chip if there was no streak) |
+
+The streak counts your saved rolls in recorded-time order, including rolls made
+before you turned sharing on; wettings, changes and water logs don't break it.
+It is saved when the post is created (and refreshed if you edit that roll), so
+later rolls or backdated offline rolls don't change older posts. Position,
+reported desperation level and cooldown details stay private. Older app versions
+that don't know about rolls keep your saved roll choice when they save the other
+settings. Friends can mute these pushes with **Settings → Social notifications →
+Rolls**, like the other record types. The API `record` field for a roll is
+`{kind:'roll', result, probability, desperationMode, holdStreak, occurredAt}`.
+
 Private posts are visible to you and accepted friends. Public posts are visible
 to all signed-in members. Changing the audience or switching sharing off affects
 future posts only. Correcting a shared record updates its post; deleting the
@@ -123,7 +146,7 @@ Posts support the same likes, comments, reports and moderation as manual updates
 and friends receive their usual new-post notification according to their settings.
 
 In **Settings → Social notifications**, recipients can separately turn off
-**Accidents & potty visits**, **Changies (diaper changes)** or **Water logs**.
+**Accidents & potty visits**, **Changies (diaper changes)**, **Water logs** or **Rolls**.
 These filters apply to automatic record-post pushes and require **New posts from
 friends** to be on. They start on and preserve saved opt-outs across devices.
 Turning a type off cancels its queued pushes. Posts and stored activity remain
@@ -316,12 +339,18 @@ lock; access and duplicate checks run again inside the publishing transaction.
 
 ## Deployment and checks
 
+Roll posts add `rolls` to `social_record_preferences`, `hold_streak` to
+`social_record_posts` and `friend_rolls` (default on) to
+`notification_preferences`, all added at startup. Deploy `server/social.mjs`,
+`server/activity.mjs`, `server/notifications.mjs`, `lib/social.js`,
+`lib/record-sharing.js`, `lib/notifications.js`, `index.html`, `styles.css` and
+`sw.js` (cache `little-log-v109-roll-posts`) together.
+
 The 24/7 badge adds `social_badges` (current choice) and `social_badge_events`
 (on/off history) to `little-log.sqlite`, created at startup. Post authors gain a
 `fullTime` boolean. Deploy `server/social.mjs`, `server/api.mjs`,
 `lib/badge-settings.js`, `lib/social.js`, `app.js`, `index.html`, `styles.css`,
-`admin/social.js`, `admin/index.html`, `scripts/serve.mjs` and `sw.js` (cache
-`little-log-v106-full-time-badge`) together.
+`admin/social.js`, `admin/index.html`, `scripts/serve.mjs` and `sw.js` together (now shipped with the roll-posts cache above).
 
 Sticker gifts add a nullable `sticker` column to `social_comments` and
 `friend_messages` (added at startup) and a `sticker_gifts` receipt table in

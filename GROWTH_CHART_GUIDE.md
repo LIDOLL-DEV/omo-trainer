@@ -70,7 +70,7 @@ browser chart** ends the Little Log app session and clears this chart's local
 copy; it leaves the central chart and Little Log's observation cache intact.
 Signing out through Little Log Settings clears both local observations and the
 integrated chart after ending the shared session; server data remains saved.
-The chart uses the shared Settings sign-out control and the shared CRT/install controls.
+The chart uses the shared Settings sign-out control and the shared install control. Little Log has no CRT control, so the embedded chart shows no toggle; the standalone chart page keeps its own.
 The shared identity-provider login may remain active. Browser profiles shared
 with other people can expose cached content; installed apps may have separate
 storage on some platforms. Earlier exports/backups can retain removed data.

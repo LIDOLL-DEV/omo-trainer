@@ -12,7 +12,7 @@ Your device now stays signed in for 30 days, renewed while the app is used, with
 
 The statistics API is unavailable to ordinary participant accounts. Details: [STATISTICS_API.md](STATISTICS_API.md).
 
-Little Log now appears as a recovered Chrysalis observation terminal. **Record archive** is your history view; **Settings & data** contains account and export controls. The **CRT FX** button toggles a static terminal texture and remembers the choice in this browser. Reduced-motion settings turn that texture off.
+Little Log now appears as a recovered Chrysalis observation terminal. **Record archive** is your history view; **Settings & data** contains account and export controls. The old **CRT FX** button and its scanline texture have been removed, so the screen is always clear. On a phone, open the menu with **Menu** or by swiping right from the left edge of the screen; swipe left to close it.
 
 - Open `/tracker/` in your browser. Optional: install it from your browser menu, or Safari's Share → Add to Home Screen.
 - In Settings, sign in with your shared lidoll.dev account to connect this device. Connecting uploads existing entries and future changes; Chrysalis can use synced records for analysis.
@@ -139,6 +139,9 @@ Use **Run and share with MommyBot** to request an on-demand report for the bot's
   **AUTO-LOGGED**, so they're easy to tell apart from real updates.
 - Like posts and comments, and open Comments to join the conversation. Choose
   **Reply** under a comment to answer it in a thread.
+- Want friends to see your rolls? Tick **Automatically post my rolls** in
+  **Settings → Records on your timeline**. Each roll posts its result, whether
+  it was desperation mode, and how many holds you rolled in a row.
 - Wear protection 24/7? Turn on **Settings → 24/7 badge** to show a **24/7**
   chip next to Friends/Public on your posts. Turn it off any time.
 - Choose **🎁 Add sticker** under a comment, reply or message box to send one

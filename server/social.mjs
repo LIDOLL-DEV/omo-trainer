@@ -31,6 +31,8 @@ export function createSocial(db,friends,{now=Date.now,activity,stickerInfo=id=>(
  db.exec(`CREATE TABLE IF NOT EXISTS social_badges(seq INTEGER PRIMARY KEY AUTOINCREMENT,owner TEXT NOT NULL UNIQUE REFERENCES participants(id),full_time INTEGER NOT NULL DEFAULT 0,since INTEGER,version INTEGER NOT NULL,updated INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS social_badge_events(seq INTEGER PRIMARY KEY AUTOINCREMENT,owner TEXT NOT NULL REFERENCES participants(id),full_time INTEGER NOT NULL,created INTEGER NOT NULL);
  CREATE INDEX IF NOT EXISTS social_badge_event_time ON social_badge_events(created);`); // 24/7 wear badge: current choice per member, plus an append-only history for admin statistics.
+ if(!db.prepare('PRAGMA table_info(social_record_preferences)').all().some(c=>c.name==='rolls'))db.exec('ALTER TABLE social_record_preferences ADD COLUMN rolls INTEGER NOT NULL DEFAULT 0'); // Roll posts are a separate opt-in, off for everyone.
+ if(!db.prepare('PRAGMA table_info(social_record_posts)').all().some(c=>c.name==='hold_streak'))db.exec('ALTER TABLE social_record_posts ADD COLUMN hold_streak INTEGER'); // Holds in a row at the time of a roll post; NULL for other records.
  const uploads=createUploadAdmission(db,{now});
  db.exec('CREATE INDEX IF NOT EXISTS social_post_rate ON social_posts(owner,created)');
  const postBudget=owner=>db.prepare('SELECT COUNT(*) AS n FROM social_posts WHERE owner=? AND created>?').get(owner,now()-60000).n<10;
@@ -72,10 +74,10 @@ export function createSocial(db,friends,{now=Date.now,activity,stickerInfo=id=>(
   return transaction(()=>{requireContributor(owner);if(check())return {...profile(owner),repeated:true};db.prepare('INSERT INTO social_profiles(owner,version,request_hash,data,updated) VALUES (?,?,?,?,?) ON CONFLICT(owner) DO UPDATE SET version=excluded.version,request_hash=excluded.request_hash,data=excluded.data,updated=excluded.updated').run(owner,requestId,fingerprint,image?.data??null,now());return {...profile(owner),repeated:false};});
  } // Compare the loaded version after decoding; retries, other devices and moderation cannot overwrite a newer picture.
  function existingPost(owner,requestId,fingerprint){const row=db.prepare('SELECT id,request_hash,deleted FROM social_posts WHERE owner=? AND request_id=?').get(owner,requestId);if(row&&row.request_hash!==fingerprint)fail(409,'This request already belongs to a different post.');return row?{id:row.id,deleted:Boolean(row.deleted),repeated:true}:null;}
- function recordPreferences(owner){requireUser(owner);const row=db.prepare('SELECT enabled,audience,version FROM social_record_preferences WHERE owner=?').get(owner);return {enabled:Boolean(row?.enabled),audience:row?.audience??'friends',version:row?.version??0};} // Existing and new accounts start opted out, independently of push preferences.
+ function recordPreferences(owner){requireUser(owner);const row=db.prepare('SELECT enabled,audience,version,rolls FROM social_record_preferences WHERE owner=?').get(owner);return {enabled:Boolean(row?.enabled),rolls:Boolean(row?.rolls),audience:row?.audience??'friends',version:row?.version??0};} // Existing and new accounts start opted out, independently of push preferences.
  function saveRecordPreferences(owner,input){
-  requireUser(owner);if(!input||typeof input.enabled!=='boolean'||!['friends','public'].includes(input.audience)||!Number.isSafeInteger(input.version)||input.version<0)fail(400,'Choose whether to post records and who can see them.');
-  return transaction(()=>{const current=recordPreferences(owner);if(current.version!==input.version)fail(409,'These settings changed on another device. Refresh before saving.');db.prepare('INSERT INTO social_record_preferences VALUES (?,?,?,?) ON CONFLICT(owner) DO UPDATE SET enabled=excluded.enabled,audience=excluded.audience,version=excluded.version').run(owner,Number(input.enabled),input.audience,current.version+1);return recordPreferences(owner);});
+  requireUser(owner);if(!input||typeof input.enabled!=='boolean'||(input.rolls!==undefined&&typeof input.rolls!=='boolean')||!['friends','public'].includes(input.audience)||!Number.isSafeInteger(input.version)||input.version<0)fail(400,'Choose whether to post records and who can see them.');
+  return transaction(()=>{const current=recordPreferences(owner);if(current.version!==input.version)fail(409,'These settings changed on another device. Refresh before saving.');const rolls=input.rolls??current.rolls;/* Older app versions don't send rolls; keep the saved choice. */db.prepare('INSERT INTO social_record_preferences(owner,enabled,audience,version,rolls) VALUES (?,?,?,?,?) ON CONFLICT(owner) DO UPDATE SET enabled=excluded.enabled,audience=excluded.audience,version=excluded.version,rolls=excluded.rolls').run(owner,Number(input.enabled),input.audience,current.version+1,Number(rolls));return recordPreferences(owner);});
  } // Version checks prevent a stale device from silently re-enabling sharing or broadening the audience.
  function badgePreferences(owner){requireUser(owner);const row=db.prepare('SELECT full_time,since,version FROM social_badges WHERE owner=?').get(owner);return {fullTime:Boolean(row?.full_time),since:row?.full_time?row.since:null,version:row?.version??0};} // Everyone starts without the badge.
  function saveBadgePreferences(owner,input){
@@ -87,19 +89,30 @@ export function createSocial(db,friends,{now=Date.now,activity,stickerInfo=id=>(
    return badgePreferences(owner);});
  } // Version checks stop a stale device from silently switching the badge back.
  const fullTime=owner=>Boolean(db.prepare('SELECT full_time FROM social_badges WHERE owner=?').get(owner)?.full_time); // Shown next to the audience pill on this member's posts.
- function recordSummary(entry){
-  if(!['wetting','diaper-change','observation'].includes(entry?.kind))return null;
+ const RECORD_KINDS=['wetting','diaper-change','observation','roll']; // Record kinds that can become timeline posts (legacy combined snapshots never do).
+ function holdStreak(owner,entry){ // Holds in a row ending at this roll (for a pee roll: the holds just before it). Other records don't break a roll streak.
+  const rows=db.prepare("SELECT result FROM entries WHERE participant_id=? AND deleted_at IS NULL AND json_extract(payload_json,'$.kind')='roll' AND (occurred_at<? OR (occurred_at=? AND id<=?)) ORDER BY occurred_at DESC,id DESC LIMIT 1000").all(owner,entry.occurredAt,entry.occurredAt,entry.id);
+  let streak=0;for(const row of rows.slice(entry.result==='pee'?1:0)){if(row.result!=='hold')break;streak++;}
+  return streak;
+ }
+ function recordSummary(entry,streak=0){
+  if(!RECORD_KINDS.includes(entry?.kind))return null;
+  if(entry.kind==='roll'){ // Result, chance, mode and streak; position, desperation level and cooldowns stay private.
+   const head=`Roll · ${entry.result==='hold'?'Hold':'Pee'} (${entry.probability}% chance)${entry.desperationMode?' · Desperation mode':''}`;
+   const line=entry.result==='hold'?`Hold streak: ${streak} in a row`:streak?`Had to go after ${streak} hold${streak===1?'':'s'} in a row`:'';
+   return head+(line?'\n'+line:'')+'\nRecorded: '+entry.occurredAt.replace('T',' ');
+  }
   const labels={forced:'Forced wetting','semi-forced':'Semi-forced wetting',voluntary:'Voluntary wetting','semi-involuntary':'Semi-involuntary accident',involuntary:'Involuntary accident',bedwetting:'Bedwetting','used-the-potty':'Used the potty'};
   const summary=entry.kind==='observation'?`Liquids logged · ${entry.liquidsMl} mL`:entry.kind==='diaper-change'?`Diaper change · ${entry.wettingsCount} wetting${entry.wettingsCount===1?'':'s'}`:labels[entry.category];
   return summary+'\nRecorded: '+entry.occurredAt.replace('T',' ');
  } // Share event type, recorded time and intake/change amounts, never the full private record or cumulative legacy snapshots.
  function syncRecordPost(owner,entryId,entry,isNew=false){
-  const linked=db.prepare('SELECT post_id FROM social_record_posts WHERE owner=? AND entry_id=?').get(owner,entryId),body=recordSummary(entry);
-  if(linked){if(!body)removePost(linked.post_id);else db.prepare('UPDATE social_posts SET body=? WHERE id=? AND deleted IS NULL').run(body,linked.post_id);return;}
+  const linked=db.prepare('SELECT post_id FROM social_record_posts WHERE owner=? AND entry_id=?').get(owner,entryId),streak=entry?.kind==='roll'?holdStreak(owner,entry):null,body=recordSummary(entry,streak??0);
+  if(linked){if(!body)removePost(linked.post_id);else{db.prepare('UPDATE social_posts SET body=? WHERE id=? AND deleted IS NULL').run(body,linked.post_id);db.prepare('UPDATE social_record_posts SET hold_streak=? WHERE post_id=?').run(streak,linked.post_id);}return;} // Corrections refresh the summary and streak.
   if(!isNew||!body||!active(owner)||db.prepare('SELECT 1 FROM social_restrictions WHERE owner=?').get(owner))return;
-  const pref=recordPreferences(owner);if(!pref.enabled||!postBudget(owner))return;
+  const pref=recordPreferences(owner);if(!(entry.kind==='roll'?pref.rolls:pref.enabled)||!postBudget(owner))return; // Rolls and bathroom/water logs are opted into separately.
   const id=randomUUID(),instant=now();db.prepare('INSERT INTO social_posts(id,owner,request_id,request_hash,body,audience,created) VALUES (?,?,?,?,?,?,?)').run(id,owner,randomUUID(),hash({entryId}),body,pref.audience,instant);
-  db.prepare('INSERT INTO social_record_posts VALUES (?,?,?)').run(owner,entryId,id);
+  db.prepare('INSERT INTO social_record_posts(owner,entry_id,post_id,hold_streak) VALUES (?,?,?,?)').run(owner,entryId,id,streak);
   for(const friend of friends.list(owner).filter(f=>f.state==='accepted'))activity?.record(friend.participantId,{source:'post:'+id,kind:'friend-post',actor:owner,postId:id,created:instant},true);
  } // Runs inside the record transaction: retries/edits never duplicate posts, and deletion never resurrects one.
  async function publish(owner,input,permit) {
@@ -177,9 +190,9 @@ export function createSocial(db,friends,{now=Date.now,activity,stickerInfo=id=>(
   return {...safe,author:{id:owner,label,...avatarInfo(owner),fullTime:fullTime(owner)},record:recordInfo(post.id),pictures:db.prepare('SELECT id,alt,width,height FROM social_pictures WHERE post_id=? ORDER BY position').all(post.id),...counts(viewer,post.id)};
  } // Never expose write receipts; ordinary reads and moderation share the same safe post representation.
  function recordInfo(postId){
-  const row=db.prepare("SELECT json_extract(e.payload_json,'$.kind') AS kind,json_extract(e.payload_json,'$.category') AS category,json_extract(e.payload_json,'$.liquidsMl') AS liquidsMl,json_extract(e.payload_json,'$.wettingsCount') AS wettingsCount,json_extract(e.payload_json,'$.occurredAt') AS occurredAt FROM social_record_posts r JOIN entries e ON e.participant_id=r.owner AND e.id=r.entry_id WHERE r.post_id=?").get(postId);
-  if(!row||!['wetting','diaper-change','observation'].includes(row.kind))return null; // Manual posts (and anything unexpected) render as normal posts.
-  return {kind:row.kind,...(row.kind==='wetting'?{category:row.category}:{}),...(row.kind==='observation'?{liquidsMl:row.liquidsMl}:{}),...(row.kind==='diaper-change'?{wettingsCount:row.wettingsCount}:{}),occurredAt:row.occurredAt};
+  const row=db.prepare("SELECT json_extract(e.payload_json,'$.kind') AS kind,json_extract(e.payload_json,'$.category') AS category,json_extract(e.payload_json,'$.liquidsMl') AS liquidsMl,json_extract(e.payload_json,'$.wettingsCount') AS wettingsCount,json_extract(e.payload_json,'$.occurredAt') AS occurredAt,json_extract(e.payload_json,'$.result') AS result,json_extract(e.payload_json,'$.probability') AS probability,json_extract(e.payload_json,'$.desperationMode') AS desperationMode,r.hold_streak AS holdStreak FROM social_record_posts r JOIN entries e ON e.participant_id=r.owner AND e.id=r.entry_id WHERE r.post_id=?").get(postId);
+  if(!row||!RECORD_KINDS.includes(row.kind))return null; // Manual posts (and anything unexpected) render as normal posts.
+  return {kind:row.kind,...(row.kind==='wetting'?{category:row.category}:{}),...(row.kind==='observation'?{liquidsMl:row.liquidsMl}:{}),...(row.kind==='diaper-change'?{wettingsCount:row.wettingsCount}:{}),...(row.kind==='roll'?{result:row.result,probability:row.probability,desperationMode:Boolean(row.desperationMode),holdStreak:row.holdStreak??0}:{}),occurredAt:row.occurredAt};
  } // Automatic record posts expose only what their summary text already shares: type, category, amount/count and recorded time.
  function counts(owner,id){return {likes:db.prepare('SELECT COUNT(*) AS n FROM social_likes l WHERE post_id=? AND NOT EXISTS(SELECT 1 FROM participant_access a WHERE a.participant_id=l.owner AND a.disabled=1)').get(id).n,liked:Boolean(db.prepare('SELECT 1 FROM social_likes WHERE post_id=? AND owner=?').get(id,owner)),comments:db.prepare('SELECT COUNT(*) AS n FROM social_comments c WHERE post_id=? AND deleted IS NULL AND NOT EXISTS(SELECT 1 FROM participant_access a WHERE a.participant_id=c.owner AND a.disabled=1)').get(id).n};}
  function post(owner,id){return serializePost(owner,postAccess(owner,id));}

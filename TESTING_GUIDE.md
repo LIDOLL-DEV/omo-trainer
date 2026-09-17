@@ -60,7 +60,7 @@ The workflow covers independent observation logging and interval intake totals, 
 
 The protocol browser workflow uses a controlled clock and deterministic test-only RNG to verify blocked repeat rolls, exact countdown expiry, wetting/observation logging during cooldown, preservation of unsaved intake during a roll, offline reload, midnight decreases, empty-day increases, retrospective corrections, historical probability preservation, wetting filters/deletion, and all routes at six viewport widths. It writes `artifacts/protocol-desktop.png` and `artifacts/protocol-mobile.png`.
 
-It also checks that the Chrysalis CRT toggle persists through reload, switches off under reduced motion, and restores the saved preference when that media setting clears. For visual releases, inspect desktop and phone screenshots, chart/legend colors, visible focus rings, dark native date/select controls, and sign-in/consent contrast. Check all four routes (Overview, Record archive, Settings, and About) at 320, 390, 680, 768, 1024, and 1440 pixels for document overflow. The icon generator and HTTP tests cover all install-icon sizes; visual inspection verifies the sigil itself.
+It also checks that the CRT FX button is gone and that an old saved `ldq-crt-effect=on` value no longer turns scanlines on in the caregiver theme. (Start the server with `MSYS_NO_PATHCONV=1` in Git Bash, or `BASE_PATH=/tracker/` is rewritten into a Windows path.) For visual releases, inspect desktop and phone screenshots, chart/legend colors, visible focus rings, dark native date/select controls, and sign-in/consent contrast. Check all four routes (Overview, Record archive, Settings, and About) at 320, 390, 680, 768, 1024, and 1440 pixels for document overflow. The icon generator and HTTP tests cover all install-icon sizes; visual inspection verifies the sigil itself.
 
 ## Connected browser and shared-auth workflows
 
@@ -111,6 +111,21 @@ the keyboard open. The bar switches panels without saving records or rolling.
 
 The bar order is Record observation, Roll, Star chart, Pattern analysis, Games, Messaging;
 `tests/message-badge-browser.mjs` asserts that exact href order.
+`tests/roll-posts.test.mjs` (in `npm test`) checks the separate roll opt-in,
+older clients keeping the saved choice, the post text, desperation mode, hold
+streaks (unposted earlier rolls count, other records don't break it, pee rolls
+report the streak before them), edits and deletion. `tests/social-activity.test.mjs`
+covers the **Rolls** push mute. `node tests/record-posts-browser.mjs` checks the
+🎲 roll line and its mode/streak chips; `node tests/record-sharing-browser.mjs`
+ticks the Rolls checkbox and now expects the activity-line feed wording.
+
+`node tests/menu-swipe-browser.mjs` (Puppeteer) checks the phone menu swipe:
+a right swipe starting within 40px of the left edge opens the drawer, a left
+swipe closes it, and swipes from the middle, short swipes, mostly vertical drags
+and desktop widths are ignored. Touch events are dispatched inside the page
+because Chrome's own swipe-to-go-back would otherwise leave the test page. Try
+it on a real phone too (see the note in CONTRIBUTOR_GUIDE.md).
+
 `tests/full-time-badge.test.mjs` (in `npm test`) checks the 24/7 badge: off by
 default, version conflicts, bad input, the badge on old and new posts, the kept
 start date, paused accounts, and admin statistics (active members only, repeat

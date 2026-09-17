@@ -121,13 +121,13 @@ test('existing notification subscribers get social defaults once, with persisten
 });
 
 test('record-post notification filters are independent and preserve manual posts and stored activity',async()=>{
- for(const [field,kind] of [['friendWettings','wetting'],['friendChanges','diaper-change'],['friendLiquids','observation']]){
+ for(const [field,kind] of [['friendWettings','wetting'],['friendChanges','diaper-change'],['friendLiquids','observation'],['friendRolls','roll']]){
   const {db,a,b,sent}=fixture();try{
-   db.social.saveRecordPreferences(a.id,{enabled:true,audience:'friends',version:0});db.notifications.save(b.id,pref('b',{[field]:false,communitySupport:false}));
-   const entries=[{id:'wet',kind:'wetting',category:'involuntary',position:'sitting',diaperNumber:1},{id:'change',kind:'diaper-change',wettingsCount:2,diaperNumber:1},{id:'water',kind:'observation',liquidsMl:250,liquidsMode:'interval',diaperNumber:1}].map(e=>({...e,occurredAt:'2026-09-15T14:00:00+00:00'}));
+   db.social.saveRecordPreferences(a.id,{enabled:true,rolls:true,audience:'friends',version:0});db.notifications.save(b.id,pref('b',{[field]:false,communitySupport:false}));
+   const entries=[{id:'wet',kind:'wetting',category:'involuntary',position:'sitting',diaperNumber:1},{id:'change',kind:'diaper-change',wettingsCount:2,diaperNumber:1},{id:'water',kind:'observation',liquidsMl:250,liquidsMode:'interval',diaperNumber:1},{id:'roll',kind:'roll',result:'hold',rolledResult:'hold',source:'random',probability:50,rolledAt:'2026-09-15T14:00:00+00:00'}].map(e=>({...e,occurredAt:'2026-09-15T14:00:00+00:00'}));
    db.sync(a.id,entries.map(entry=>({id:entry.id,mutationId:entry.id,baseVersion:0,entry})));await db.social.publish(a.id,post('manual'));
-   const activity=db.activity.list(b.id);assert.equal(activity.items.length,4);assert.equal(db.social.feed(b.id).items.length,4);await db.notifications.tick(instant);assert.equal(sent.length,3,field+' only mutes its own type');
-   const excluded=kind==='wetting'?'Involuntary accident':kind==='diaper-change'?'Diaper change':'Liquids logged';const blocked=activity.items.find(n=>db.social.post(b.id,n.postId).body.startsWith(excluded));assert.ok(blocked);assert.ok(!sent.some(s=>s.p.tag==='activity-'+blocked.id));
+   const activity=db.activity.list(b.id);assert.equal(activity.items.length,5);assert.equal(db.social.feed(b.id).items.length,5);await db.notifications.tick(instant);assert.equal(sent.length,4,field+' only mutes its own type');
+   const excluded=kind==='wetting'?'Involuntary accident':kind==='diaper-change'?'Diaper change':kind==='roll'?'Roll ·':'Liquids logged';const blocked=activity.items.find(n=>db.social.post(b.id,n.postId).body.startsWith(excluded));assert.ok(blocked);assert.ok(!sent.some(s=>s.p.tag==='activity-'+blocked.id));
    assert.equal(db.social.recordPreferences(a.id).enabled,true);assert.equal(db.notifications.status(b.id).preferences.friendPosts,1);
   }finally{db.close();}
  }

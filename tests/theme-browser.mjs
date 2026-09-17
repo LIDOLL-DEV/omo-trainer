@@ -32,12 +32,12 @@ try {
   await page.waitForFunction(()=>!document.querySelector('#main-navigation').open);
   assert.equal(await page.evaluate(()=>document.documentElement.classList.contains('navigation-open')),false,'Resizing an open drawer releases the page');
   assert.equal(await page.$eval('#desktop-navigation',el=>el.contains(document.activeElement)),true,'Focus returns to the desktop links');
-  assert.equal(await page.$eval('#crt-toggle',el=>el.getAttribute('aria-pressed')),'false');
+  assert.equal(await page.$('#crt-toggle'),null); // The CRT FX button is gone.
   await page.screenshot({path:resolve(directory,'little-tracker-desktop.png'),fullPage:true});
   await page.$eval('#liquids',el=>{el.value='321';el.dispatchEvent(new Event('input',{bubbles:true}));});
   await navigateMenu(page,'[data-page="settings"]');await page.select('#theme-selector','caregiver-tracker');
   assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).backgroundColor),'rgb(26, 6, 17)');
-  assert.equal(await page.$eval('#crt-toggle',el=>el.getAttribute('aria-pressed')),'true');
+  assert.equal(await page.evaluate(()=>document.documentElement.classList.contains('crt-enabled')),false); // No scanlines in the caregiver theme either.
   assert.equal(await page.$eval('#liquids',el=>el.value),'321','Switching themes retains unfinished forms');
   await page.reload({waitUntil:'networkidle0'});assert.equal(await page.$eval('#theme-selector',el=>el.value),'caregiver-tracker');
   await navigateMenu(page,'[data-page="overview"]');await page.screenshot({path:resolve(directory,'caregiver-tracker-desktop.png'),fullPage:true});
