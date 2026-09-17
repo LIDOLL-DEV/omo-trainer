@@ -19,7 +19,7 @@ const count=user=>db.economy.snapshot(user.id).types.reduce((n,t)=>n+t.quantity,
 assert.equal(count(alice),2);
 let browser;const errors=[];
 const tap=(page,selector)=>page.$eval(selector,n=>{n.scrollIntoView({block:'center'});n.click();}); // Centre first: the fixed Social bar covers the page's bottom edge.
-async function open(page,path){await page.bringToFront();await page.goto(origin+'/tracker/'+path,{waitUntil:'networkidle0'});await page.reload({waitUntil:'networkidle0'});}
+async function open(page,path){await page.bringToFront();await page.goto(origin+'/tracker/'+path,{waitUntil:'networkidle0'});await page.reload({waitUntil:'networkidle0'});if(path==='#feed')await page.waitForFunction(()=>!document.querySelector('#feed-refresh').disabled&&!/Loading/.test(document.querySelector('#feed-status').textContent));} // Wait for the feed's first load so it can't replace a comment box mid-test.
 try{
  browser=await puppeteer.launch({executablePath:process.env.CHROME_PATH,headless:true});const pages=[];
  for(const user of [alice,bob]){const context=await browser.createBrowserContext();await context.setCookie({name:'little_log',value:db.createSession(user.id),url:origin+'/tracker/',path:'/tracker/',httpOnly:true});const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));await page.setViewport({width:390,height:900});pages.push(page);}

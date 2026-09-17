@@ -26,8 +26,14 @@ or its pictures. Use Show updates to switch between Friends & me and Public.
 Friends & me includes your posts and current friends' posts, including public
 ones. Next to it, **Show** filters the feed by type: **All** (default), **Posts**
 (written status updates only) or **Auto-updates** (automatic bathroom, water
-and roll posts only). Both choices combine, and changing either returns to the
-newest page. Older updates loads another 20 posts of the chosen type. You can delete your own posts.
+and roll posts only). Both choices combine, and changing either starts again from the newest posts.
+
+The feed is an infinite scrolling timeline: as you near the bottom, the next 20
+posts of the chosen type load in automatically below the ones you've read (a
+tall screen keeps loading until it is full). **Load more updates** under the
+last post does the same by hand, and **You're all caught up ✨** appears when
+there is nothing older. Refresh, deleting a post or changing a filter reloads
+from the top. A single post opened from a link or notification doesn't page. You can delete your own posts.
 
 Friend posts are visible to current accepted friends. Removing a friendship
 stops future reads of those posts and pictures; accepting a new or renewed
@@ -342,6 +348,9 @@ and conversations. Picture decoding finishes before acquiring the SQLite write
 lock; access and duplicate checks run again inside the publishing transaction.
 
 ## Deployment and checks
+
+The infinite feed is client-only: deploy `lib/social.js`, `index.html`,
+`styles.css` and `sw.js` (cache `little-log-v112-infinite-feed`) together.
 
 The feed **Show** filter needs no database changes; deploy `server/social.mjs`,
 `server/api.mjs`, `lib/social.js`, `index.html`, `styles.css` and `sw.js`

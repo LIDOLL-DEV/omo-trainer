@@ -111,6 +111,13 @@ the keyboard open. The bar switches panels without saving records or rolling.
 
 The bar order is Record observation, Roll, Star chart, Pattern analysis, Games, Messaging;
 `tests/message-badge-browser.mjs` asserts that exact href order.
+`node tests/infinite-feed-browser.mjs` (Puppeteer) seeds 45 posts and scrolls
+the phone feed: pages load in order with no gaps or duplicates, the caught-up
+note appears above the Social bar, filters restart from the newest page, the
+**Load more updates** button works, and a very tall window fills itself. The
+sticker browser test now waits for the feed's first load before opening
+comments (it was occasionally racing it).
+
 `tests/feed-filter.test.mjs` (in `npm test`) checks the feed's All / Posts /
 Auto-updates filter, including paging inside a filter and bad values;
 `node tests/record-posts-browser.mjs` switches the **Show** dropdown in Chrome.

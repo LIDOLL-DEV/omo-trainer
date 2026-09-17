@@ -1947,6 +1947,8 @@ html.photo-viewing { overflow:hidden; }
 .comment-replies .comment-replies .comment-replies .comment-replies { margin-left:0;padding-left:0;border-left:0; } /* stop indenting past three levels */
 /* 24/7 wear badge: small bold chip beside the Friends/Public pill and in Settings. */
 .badge-247 { display:inline-block;margin-right:6px;padding:2px 8px;border-radius:999px;background:var(--pink);color:#fff;font-size:11px;font-weight:800;letter-spacing:.04em;line-height:1.5;vertical-align:middle;white-space:nowrap; }
+.feed-more { justify-content:center;min-height:1px; } /* infinite-scroll sentinel below the last post */
+.feed-more .field-help { margin:8px 0;text-align:center; }
 .feed-filters { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 10px; } /* "Show updates" and "Show" side by side */
 .feed-filters select { width:100%; }
 .post-pills { display:flex;align-items:center;justify-content:flex-end; } /* badge + audience pill on one row */

@@ -139,6 +139,8 @@ Use **Run and share with MommyBot** to request an on-demand report for the bot's
   **AUTO-LOGGED**, so they're easy to tell apart from real updates.
 - Like posts and comments, and open Comments to join the conversation. Choose
   **Reply** under a comment to answer it in a thread.
+- Keep scrolling the feed: older updates load in automatically until you see
+  **You're all caught up ✨**.
 - Use **Show** at the top of the feed to see **All**, only **Posts**, or only
   **Auto-updates** (automatic logs and rolls).
 - Want friends to see your rolls? Tick **Automatically post my rolls** in
