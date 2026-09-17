@@ -35,6 +35,10 @@ test('Quest social/cloud routes require expanded consent, correct verbs and brow
  assert.equal((await fetch(external+'cloud?client_id=lidollquest',{method:'DELETE',headers:nativeHeaders})).status,405);
  assert.equal((await fetch(base+'cloud/action',{headers})).status,405);
  assert.equal((await post('cloud/action',{action:'begin'}, {Cookie:headers.Cookie})).status,403);
+ assert.equal((await fetch(base+'characters/action',{headers})).status,405);
+ assert.equal((await post('characters/action',{action:'delete'}, {Cookie:headers.Cookie})).status,403);
+ assert.equal((await post('characters/action',{action:'rename'}, {...headers,Origin:'https://evil.invalid'})).status,403);
+ assert.equal((await fetch(external+'characters/action?client_id=lidollquest',{method:'POST',headers:{Authorization:'Bearer '+legacy,'Content-Type':'application/json'},body:JSON.stringify({action:'delete'})})).status,403);
  db.admin.bootstrap(alice.id);const row=db.admin.users(alice.id).find(u=>u.id===bob.id);db.admin.updateUser(alice.id,{action:'update',id:bob.id,role:'participant',disabled:true,version:row.version});
  assert.equal((await fetch(external+'social?client_id=lidollquest',{headers:nativeHeaders})).status,401);
  assert.equal((await (await fetch(base+'social',{headers})).json()).friends.length,0);
