@@ -134,11 +134,13 @@ export function createSocial(db,friends,{now=Date.now,activity,stickerInfo=id=>(
    return {id,repeated:false};
   });
  }
- function feed(owner,{audience='friends',before}={}) {
-  requireUser(owner);if(!['friends','public'].includes(audience))fail(400,'Choose the Friends or Public feed.');
+ const FEED_KINDS={all:'',posts:'AND NOT EXISTS(SELECT 1 FROM social_record_posts r WHERE r.post_id=p.id)',auto:'AND EXISTS(SELECT 1 FROM social_record_posts r WHERE r.post_id=p.id)'}; // all = everything, posts = written updates, auto = automatic record posts.
+ function feed(owner,{audience='friends',before,kind='all'}={}) {
+  requireUser(owner);if(!['friends','public'].includes(audience))fail(400,'Choose the Friends or Public feed.');if(!Object.hasOwn(FEED_KINDS,kind))fail(400,'Choose all updates, posts or auto-updates.');
   const rows=db.prepare(`SELECT p.seq,p.id,p.owner,p.body,p.audience,p.created,u.label FROM social_posts p JOIN participants u ON u.id=p.owner WHERE p.deleted IS NULL AND p.seq<?
    AND NOT EXISTS(SELECT 1 FROM participant_access x WHERE x.participant_id=p.owner AND x.disabled=1)
    AND (${audience==='public'?"p.audience='public'":"(p.owner=? OR EXISTS(SELECT 1 FROM friendships f WHERE f.state='accepted' AND ((f.a=? AND f.b=p.owner) OR (f.b=? AND f.a=p.owner))))"})
+   ${FEED_KINDS[kind]}
    ORDER BY p.seq DESC LIMIT 21`).all(cursor(before),...(audience==='friends'?[owner,owner,owner]:[]));
   return {items:rows.slice(0,20).map(post=>serializePost(owner,post)),nextBefore:rows.length>20?rows[19].seq:null};
  } // Use a stable sequence cursor so new posts do not duplicate or skip older pages.

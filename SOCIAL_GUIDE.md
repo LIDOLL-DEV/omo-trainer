@@ -24,7 +24,10 @@ audience in memory; after publishing, choose **View your post** to open it. Each
 signed-in, enabled Little Log members; signed-out visitors cannot read the feed
 or its pictures. Use Show updates to switch between Friends & me and Public.
 Friends & me includes your posts and current friends' posts, including public
-ones. Older updates loads another 20 posts. You can delete your own posts.
+ones. Next to it, **Show** filters the feed by type: **All** (default), **Posts**
+(written status updates only) or **Auto-updates** (automatic bathroom, water
+and roll posts only). Both choices combine, and changing either returns to the
+newest page. Older updates loads another 20 posts of the chosen type. You can delete your own posts.
 
 Friend posts are visible to current accepted friends. Removing a friendship
 stops future reads of those posts and pictures; accepting a new or renewed
@@ -301,7 +304,7 @@ token. Responses, including picture bytes, use `Cache-Control: no-store`.
 | Endpoint under `api/social/` | Method | Input / result |
 | --- | --- | --- |
 | `session` | GET | Participant and CSRF for the Post composer; no feed or records |
-| `feed` | GET | `audience=friends/public`, optional `before`; `items`, `nextBefore`, participant and CSRF |
+| `feed` | GET | `audience=friends/public`, optional `kind=all/posts/auto` (default `all`), optional `before`; `items`, `nextBefore`, participant and CSRF |
 | `posts` | POST | `requestId`, `body`, `audience`, `pictures: [{data: base64, alt}]`; post ID |
 | `posts/delete` | POST | Owner-only post `id`; deletes pictures and clears text |
 | `picture` | GET | Picture `id`; JPEG bytes after live audience check |
@@ -339,12 +342,16 @@ lock; access and duplicate checks run again inside the publishing transaction.
 
 ## Deployment and checks
 
+The feed **Show** filter needs no database changes; deploy `server/social.mjs`,
+`server/api.mjs`, `lib/social.js`, `index.html`, `styles.css` and `sw.js`
+(cache `little-log-v110-feed-filter`) together.
+
 Roll posts add `rolls` to `social_record_preferences`, `hold_streak` to
 `social_record_posts` and `friend_rolls` (default on) to
 `notification_preferences`, all added at startup. Deploy `server/social.mjs`,
 `server/activity.mjs`, `server/notifications.mjs`, `lib/social.js`,
 `lib/record-sharing.js`, `lib/notifications.js`, `index.html`, `styles.css` and
-`sw.js` (cache `little-log-v109-roll-posts`) together.
+`sw.js` together (now shipped with the feed-filter cache above).
 
 The 24/7 badge adds `social_badges` (current choice) and `social_badge_events`
 (on/off history) to `little-log.sqlite`, created at startup. Post authors gain a

@@ -111,6 +111,10 @@ the keyboard open. The bar switches panels without saving records or rolling.
 
 The bar order is Record observation, Roll, Star chart, Pattern analysis, Games, Messaging;
 `tests/message-badge-browser.mjs` asserts that exact href order.
+`tests/feed-filter.test.mjs` (in `npm test`) checks the feed's All / Posts /
+Auto-updates filter, including paging inside a filter and bad values;
+`node tests/record-posts-browser.mjs` switches the **Show** dropdown in Chrome.
+
 `tests/roll-posts.test.mjs` (in `npm test`) checks the separate roll opt-in,
 older clients keeping the saved choice, the post text, desperation mode, hold
 streaks (unposted earlier rolls count, other records don't break it, pee rolls

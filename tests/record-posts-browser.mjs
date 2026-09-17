@@ -34,6 +34,11 @@ try{
  const rolls=await page.$$eval('.record-post[data-record-kind="roll"]',nodes=>nodes.map(n=>[n.querySelector('.record-sentence').textContent,[...n.querySelectorAll('.roll-chip')].map(c=>c.textContent)]));
  assert.deepEqual(rolls,[['Alice rolled PEE and had to go (50% chance)',['Normal mode','after 2 holds in a row']],['Alice rolled HOLD and held it! (25% chance)',['\u{1F525} Desperation mode','2 holds in a row']],['Alice rolled HOLD and held it! (50% chance)',['Normal mode','1 hold in a row']]],'Roll posts show result, chance, mode and streak (newest first)');
  await page.screenshot({path:resolve(directory,'rolls-390.png'),fullPage:true});
+ const shown=async kind=>{await page.select('#feed-kind',kind);await page.waitForFunction(()=>!document.querySelector('#feed-kind').disabled);return page.$$eval('#status-feed .status-card',n=>n.map(c=>c.classList.contains('record-post')));}; // Pick a filter, return which cards are auto-updates.
+ assert.deepEqual(await shown('posts'),[false],'Posts shows only written updates');
+ const autos=await shown('auto');assert.equal(autos.length,8);assert.ok(autos.every(Boolean),'Auto-updates shows only record posts');
+ await page.screenshot({path:resolve(directory,'filter-auto-390.png')});
+ assert.equal((await shown('all')).length,9,'All shows everything again');
  assert.equal(await page.$$eval('.record-post .social-body',n=>n.length),0,'Record posts replace the summary body with the activity line');
  assert.equal(await page.$eval('.status-card:not(.record-post) .social-body',n=>n.textContent),'A real status update');
  assert.match(await page.$eval('.record-post .record-meta',n=>n.textContent),/^Auto-logged · /);assert.match(await page.$eval('.record-post .record-when',n=>n.textContent),/^Recorded Sep 1[45], 2026/);
