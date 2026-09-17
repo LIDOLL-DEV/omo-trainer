@@ -28,6 +28,9 @@ export function createSocial(db,friends,{now=Date.now,activity,stickerInfo=id=>(
  for(const table of ['social_comments','friend_messages'])if(!db.prepare(`PRAGMA table_info(${table})`).all().some(c=>c.name==='sticker'))db.exec(`ALTER TABLE ${table} ADD COLUMN sticker TEXT`); // Sticker gift type ID (market.sqlite owns the inventory); NULL for text-only content.
  db.exec(`CREATE INDEX IF NOT EXISTS social_comment_root ON social_comments(root_id,seq);
  CREATE TABLE IF NOT EXISTS social_comment_likes(comment_id TEXT NOT NULL REFERENCES social_comments(id),owner TEXT NOT NULL REFERENCES participants(id),created INTEGER NOT NULL,PRIMARY KEY(comment_id,owner));`); // One like per member per comment, mirroring post likes.
+ db.exec(`CREATE TABLE IF NOT EXISTS social_badges(seq INTEGER PRIMARY KEY AUTOINCREMENT,owner TEXT NOT NULL UNIQUE REFERENCES participants(id),full_time INTEGER NOT NULL DEFAULT 0,since INTEGER,version INTEGER NOT NULL,updated INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS social_badge_events(seq INTEGER PRIMARY KEY AUTOINCREMENT,owner TEXT NOT NULL REFERENCES participants(id),full_time INTEGER NOT NULL,created INTEGER NOT NULL);
+ CREATE INDEX IF NOT EXISTS social_badge_event_time ON social_badge_events(created);`); // 24/7 wear badge: current choice per member, plus an append-only history for admin statistics.
  const uploads=createUploadAdmission(db,{now});
  db.exec('CREATE INDEX IF NOT EXISTS social_post_rate ON social_posts(owner,created)');
  const postBudget=owner=>db.prepare('SELECT COUNT(*) AS n FROM social_posts WHERE owner=? AND created>?').get(owner,now()-60000).n<10;
@@ -74,6 +77,16 @@ export function createSocial(db,friends,{now=Date.now,activity,stickerInfo=id=>(
   requireUser(owner);if(!input||typeof input.enabled!=='boolean'||!['friends','public'].includes(input.audience)||!Number.isSafeInteger(input.version)||input.version<0)fail(400,'Choose whether to post records and who can see them.');
   return transaction(()=>{const current=recordPreferences(owner);if(current.version!==input.version)fail(409,'These settings changed on another device. Refresh before saving.');db.prepare('INSERT INTO social_record_preferences VALUES (?,?,?,?) ON CONFLICT(owner) DO UPDATE SET enabled=excluded.enabled,audience=excluded.audience,version=excluded.version').run(owner,Number(input.enabled),input.audience,current.version+1);return recordPreferences(owner);});
  } // Version checks prevent a stale device from silently re-enabling sharing or broadening the audience.
+ function badgePreferences(owner){requireUser(owner);const row=db.prepare('SELECT full_time,since,version FROM social_badges WHERE owner=?').get(owner);return {fullTime:Boolean(row?.full_time),since:row?.full_time?row.since:null,version:row?.version??0};} // Everyone starts without the badge.
+ function saveBadgePreferences(owner,input){
+  requireContributor(owner);if(!input||typeof input.fullTime!=='boolean'||!Number.isSafeInteger(input.version)||input.version<0)fail(400,'Choose whether to show the 24/7 badge.'); // Paused social accounts cannot change their public profile.
+  return transaction(()=>{const current=badgePreferences(owner);if(current.version!==input.version)fail(409,'Your badge changed on another device. Refresh before saving.');
+   const instant=now(),since=input.fullTime?(current.fullTime?current.since:instant):null; // Keep the original "since" date while the badge stays on.
+   db.prepare('INSERT INTO social_badges(owner,full_time,since,version,updated) VALUES (?,?,?,?,?) ON CONFLICT(owner) DO UPDATE SET full_time=excluded.full_time,since=excluded.since,version=excluded.version,updated=excluded.updated').run(owner,Number(input.fullTime),since,current.version+1,instant);
+   if(input.fullTime!==current.fullTime)db.prepare('INSERT INTO social_badge_events(owner,full_time,created) VALUES (?,?,?)').run(owner,Number(input.fullTime),instant); // Log real changes only, so repeat saves don't inflate statistics.
+   return badgePreferences(owner);});
+ } // Version checks stop a stale device from silently switching the badge back.
+ const fullTime=owner=>Boolean(db.prepare('SELECT full_time FROM social_badges WHERE owner=?').get(owner)?.full_time); // Shown next to the audience pill on this member's posts.
  function recordSummary(entry){
   if(!['wetting','diaper-change','observation'].includes(entry?.kind))return null;
   const labels={forced:'Forced wetting','semi-forced':'Semi-forced wetting',voluntary:'Voluntary wetting','semi-involuntary':'Semi-involuntary accident',involuntary:'Involuntary accident',bedwetting:'Bedwetting','used-the-potty':'Used the potty'};
@@ -161,7 +174,7 @@ export function createSocial(db,friends,{now=Date.now,activity,stickerInfo=id=>(
  function deleteMessage(owner,id){requireUser(owner);const row=db.prepare('SELECT friendship_id FROM friend_messages WHERE id=? AND sender=?').get(key(id),owner);if(!row)fail(404,'Message not found.');db.prepare("UPDATE friend_messages SET body='',deleted=COALESCE(deleted,?) WHERE id=? AND sender=?").run(now(),id,owner);return {removed:true};}
  function serializePost(viewer,{owner,label,...post}) {
   const {request_id,request_hash,deleted,...safe}=post;
-  return {...safe,author:{id:owner,label,...avatarInfo(owner)},record:recordInfo(post.id),pictures:db.prepare('SELECT id,alt,width,height FROM social_pictures WHERE post_id=? ORDER BY position').all(post.id),...counts(viewer,post.id)};
+  return {...safe,author:{id:owner,label,...avatarInfo(owner),fullTime:fullTime(owner)},record:recordInfo(post.id),pictures:db.prepare('SELECT id,alt,width,height FROM social_pictures WHERE post_id=? ORDER BY position').all(post.id),...counts(viewer,post.id)};
  } // Never expose write receipts; ordinary reads and moderation share the same safe post representation.
  function recordInfo(postId){
   const row=db.prepare("SELECT json_extract(e.payload_json,'$.kind') AS kind,json_extract(e.payload_json,'$.category') AS category,json_extract(e.payload_json,'$.liquidsMl') AS liquidsMl,json_extract(e.payload_json,'$.wettingsCount') AS wettingsCount,json_extract(e.payload_json,'$.occurredAt') AS occurredAt FROM social_record_posts r JOIN entries e ON e.participant_id=r.owner AND e.id=r.entry_id WHERE r.post_id=?").get(postId);
@@ -262,6 +275,13 @@ export function createSocial(db,friends,{now=Date.now,activity,stickerInfo=id=>(
   requireAdmin(owner);
   if(view==='profiles'){const rows=db.prepare('SELECT s.seq,s.owner AS id,s.version AS avatarVersion,p.label FROM social_profiles s JOIN participants p ON p.id=s.owner WHERE s.data IS NOT NULL AND s.seq<? ORDER BY s.seq DESC LIMIT 31').all(cursor(before));return {items:rows.slice(0,30),nextBefore:rows.length>30?rows[29].seq:null};}
   if(postId){const p=target('post',postId);if(!p||p.deleted)fail(404,'Post not found.');const thread=commentRows(owner,postId,before);return {post:serializePost(owner,{...p,label:db.prepare('SELECT label FROM participants WHERE id=?').get(p.owner).label}),...thread,items:thread.items.filter(c=>!c.removed)};} // Moderators review live comments (replies included), not placeholders.
+  if(view==='badges'){ // 24/7 badge adoption: live wearers among active members, recent changes and who wears it.
+   const live="NOT EXISTS(SELECT 1 FROM participant_access a WHERE a.participant_id=p.id AND a.disabled=1)",month=now()-30*86400000;
+   const members=db.prepare(`SELECT COUNT(*) AS n FROM participants p WHERE ${live}`).get().n,wearers=db.prepare(`SELECT COUNT(*) AS n FROM social_badges b JOIN participants p ON p.id=b.owner WHERE b.full_time=1 AND ${live}`).get().n;
+   const changes=db.prepare('SELECT COALESCE(SUM(full_time=1),0) AS enabled,COALESCE(SUM(full_time=0),0) AS disabled FROM social_badge_events WHERE created>?').get(month);
+   const rows=db.prepare(`SELECT b.seq,p.id,p.label,b.since FROM social_badges b JOIN participants p ON p.id=b.owner WHERE b.full_time=1 AND ${live} AND b.seq<? ORDER BY b.seq DESC LIMIT 31`).all(cursor(before));
+   return {summary:{wearers,members,percent:members?Math.round(wearers*1000/members)/10:0,enabled30:changes.enabled,disabled30:changes.disabled},items:rows.slice(0,30),nextBefore:rows.length>30?rows[29].seq:null};
+  }
   if(view==='restrictions')return {items:db.prepare('SELECT r.*,p.label FROM social_restrictions r JOIN participants p ON p.id=r.owner ORDER BY r.created DESC').all(),nextBefore:null};
   if(view==='posts'){const rows=db.prepare('SELECT p.*,u.label FROM social_posts p JOIN participants u ON u.id=p.owner WHERE p.deleted IS NULL AND p.seq<? ORDER BY p.seq DESC LIMIT 31').all(cursor(before));return {items:rows.slice(0,30).map(p=>serializePost(owner,p)),nextBefore:rows.length>30?rows[29].seq:null};}
   if(view!=='reports')fail(400,'Choose a moderation view.');
@@ -288,5 +308,5 @@ export function createSocial(db,friends,{now=Date.now,activity,stickerInfo=id=>(
    db.prepare('INSERT INTO admin_audit VALUES (?,?,?,?,?,?)').run(randomUUID(),owner,'social-'+action,targetId,JSON.stringify({reason,kind:input.kind??null}),new Date(now()).toISOString());return {saved:true};
   });
  } // Require a reason and live admin role for every action; audit records contain decisions, not private content copies.
- return {upload:uploads.run,publish,feed,post,photo,deletePost,unreadMessages,conversations,messages,sendMessage,readMessages,deleteMessage,archiveMessages,like,comment,commentList,stickerRecipient,stickerContentSaved,requireUser,likeComment,deleteComment,report,moderation,moderationPhoto,moderate,activityVisible,profile,saveProfile,avatar,avatarInfo,memberProfile,recordPreferences,saveRecordPreferences,syncRecordPost};
+ return {upload:uploads.run,publish,feed,post,photo,deletePost,unreadMessages,conversations,messages,sendMessage,readMessages,deleteMessage,archiveMessages,like,comment,commentList,stickerRecipient,stickerContentSaved,requireUser,badgePreferences,saveBadgePreferences,likeComment,deleteComment,report,moderation,moderationPhoto,moderate,activityVisible,profile,saveProfile,avatar,avatarInfo,memberProfile,recordPreferences,saveRecordPreferences,syncRecordPost};
 }

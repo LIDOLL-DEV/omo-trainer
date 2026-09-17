@@ -18,6 +18,7 @@ import {openFriendShare} from './lib/friends.js';
 import './lib/social.js';
 import './lib/profile.js';
 import './lib/record-sharing.js';
+import './lib/badge-settings.js';
 import './lib/message-badge.js';
 import './potty_chart/merge.js';
 import './potty_chart/account.js';

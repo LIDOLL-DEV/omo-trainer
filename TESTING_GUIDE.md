@@ -111,6 +111,14 @@ the keyboard open. The bar switches panels without saving records or rolling.
 
 The bar order is Record observation, Roll, Star chart, Pattern analysis, Games, Messaging;
 `tests/message-badge-browser.mjs` asserts that exact href order.
+`tests/full-time-badge.test.mjs` (in `npm test`) checks the 24/7 badge: off by
+default, version conflicts, bad input, the badge on old and new posts, the kept
+start date, paused accounts, and admin statistics (active members only, repeat
+saves not counted, the 30-day window, admin-only access). With Puppeteer set up,
+`node tests/full-time-badge-browser.mjs` saves the badge in Settings, checks the
+chip sits left of the Public pill at 320/390/1024px, reads the admin
+**24/7 badges** view and turns the badge off again.
+
 `tests/sticker-gifts.test.mjs` (in `npm test`) checks sticker comments, replies
 and messages: who receives the sticker, retry safety, no self-gifts, empty
 inventory, optional text, friendship checks, gifts surviving message removal,

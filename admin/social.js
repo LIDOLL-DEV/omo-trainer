@@ -19,10 +19,12 @@ export function createSocialModeration({request,authorized}) {
  async function load(){if(busy||!authorized())return;busy=true;controls();const ticket=epoch;
   try{const query=new URLSearchParams({view:$('view').value});if(before)query.set('before',before);if(postId)query.set('postId',postId);const value=await request('social?'+query);if(ticket!==epoch||!authorized())return;next=value.nextBefore;$('list').replaceChildren();
    if(value.post)$('list').append(contentCard('post',value.post,value.post.id));
+   if(value.summary){const s=value.summary,card=node('article');card.className='moderation-card';card.append(node('h3',s.wearers+' of '+s.members+' active members show the 24/7 badge ('+s.percent+'%)'),node('p','Last 30 days: '+s.enabled30+' turned it on, '+s.disabled30+' turned it off.'));$('list').append(card);} // 24/7 badge adoption statistics.
    for(const item of value.items){let card;
     if(postId)card=contentCard('comment',item,item.id);
     else if($('view').value==='posts'){card=contentCard('post',item,item.id);card.prepend(node('p',item.audience==='public'?'Public post':'Friends post'));}
     else if($('view').value==='profiles'){card=node('article');card.className='moderation-card';const img=node('img');img.src='../api/admin/social/avatar?'+new URLSearchParams({owner:item.id,version:item.avatarVersion});img.alt=item.label+' profile picture';img.width=128;img.height=128;img.loading='lazy';card.append(node('h3',item.label),img,button('Remove profile picture',()=>void act({action:'remove-profile',participantId:item.id,version:item.avatarVersion})));}
+    else if($('view').value==='badges'){card=node('article');card.className='moderation-card';card.append(node('h3',item.label),node('p','24/7 since '+new Date(item.since).toLocaleDateString()));} // One card per current badge wearer, newest first.
     else if($('view').value==='restrictions'){card=node('article');card.className='moderation-card';card.append(node('h3',item.label),node('p',item.reason),button('Restore social access',()=>void act({action:'restore',participantId:item.owner})));}
     else {card=node('article');card.className='moderation-card';card.append(node('h3','Reported '+item.kind),node('p','Reported by '+item.reporterLabel+' on '+new Date(item.created).toLocaleString()),node('p',item.reason));
      if(item.content){card.append(contentCard(item.kind,item.content,item.target));if(item.content.postId)card.append(button('Review post and pictures',()=>{postId=item.content.postId;before=null;void load();}));}
@@ -30,7 +32,7 @@ export function createSocialModeration({request,authorized}) {
      card.append(button('Dismiss report',()=>void act({action:'dismiss',reportId:item.id})));
     }$('list').append(card);
    }
-   if(!value.items.length&&!value.post)$('list').append(node('p','Nothing to review in this view.'));
+   if(!value.items.length&&!value.post)$('list').append(node('p',value.summary?'Nobody shows the 24/7 badge yet.':'Nothing to review in this view.'));
   }catch(error){$('list').replaceChildren();$('status').textContent=error.message;}finally{busy=false;controls();}
  }
  function clear(){epoch++;$('list').replaceChildren();$('reason').value='';$('status').textContent='';postId=null;before=null;next=null;controls();}

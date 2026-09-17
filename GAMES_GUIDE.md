@@ -4,8 +4,6 @@ Choose **Games** from the menu. Each card opens a game in a separate tab:
 
 - **Diaper Atelier:** 3 LiDollcoins per roll, a saved collection and shared diaper bank.
 - **Cozy Hangman:** 1 LiDollcoin to start; each newly revealed letter position pays 1 coin.
-- **Touhou Trader:** adoption for 1 star or 25 LiDollcoins, plus parties, battles,
-  potions, healing, player sales, gifts, swaps and buybacks using online coins.
 - **Prism Drop:** choose a landing pocket and bet 1, 5, 10, 25, 50 or 100 LiDollcoins.
   Exact guesses return 2x the stake, one pocket away returns 1.5x rounded up,
   two away returns the stake, and larger misses return zero. Coin pegs add bonuses
@@ -16,8 +14,9 @@ can play; Discord membership is optional. Register if needed and approve wallet
 access for game purchases and rewards. An existing LiD0llID browser login can
 be reused. Existing Discord-linked players keep their saved collections.
 
-Touhou has a public community space for everyone. Existing Discord members can
-also visit their server worlds; each space keeps its own collection and market.
+Touhou Trader is no longer listed in the Games menu. `/tracker/games/touhou`
+still redirects to the bot so old bookmarks keep working; remove `touhou` from
+`server/games.mjs` too if the game itself is retired.
 
 All collections, saved rounds, battle rules and payment recovery remain in
 MommyBot. Little Log opens the existing games using the same online wallet.
@@ -64,7 +63,7 @@ launching the new card.
 
 Reload the installed PWA after deployment. Verify each card reaches its game,
 complete one sign-in with an already linked account and confirm the expected
-collection and Touhou server. Unit/browser fixtures cannot verify production
+collection. Unit/browser fixtures cannot verify production
 Nginx, Discord membership or the live identity provider.
 
 ## Checks

@@ -139,6 +139,8 @@ Use **Run and share with MommyBot** to request an on-demand report for the bot's
   **AUTO-LOGGED**, so they're easy to tell apart from real updates.
 - Like posts and comments, and open Comments to join the conversation. Choose
   **Reply** under a comment to answer it in a thread.
+- Wear protection 24/7? Turn on **Settings → 24/7 badge** to show a **24/7**
+  chip next to Friends/Public on your posts. Turn it off any time.
 - Choose **🎁 Add sticker** under a comment, reply or message box to send one
   of your stickers as a gift. It leaves your collection and goes to the post
   author, the comment author you replied to, or your messaging friend. Text is

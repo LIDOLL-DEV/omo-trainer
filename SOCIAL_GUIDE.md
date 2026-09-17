@@ -163,6 +163,22 @@ member on the same item does not duplicate the queue; reporting is limited to
 20 new reports per hour. Reporting a private message exposes that message to
 administrators, not the rest of the conversation.
 
+## 24/7 badge
+
+Wear protection around the clock? Open **Settings → 24/7 badge**, tick **Show
+the 24/7 badge on my posts** and press **Save badge**. A pink **24/7** chip then
+appears just left of the Friends/Public pill on all of your posts, including
+older ones, for everyone who can see them. Untick and save to remove it from
+all of your posts. It is off for everyone until they opt in, and the choice
+follows your account to every device (a stale device must refresh before
+saving). Paused social accounts cannot change it.
+
+Admins can open **Admin console → Social moderation → 24/7 badges** to track
+adoption: how many active (not disabled) members show the badge and what
+percentage that is, how many members turned it on or off in the last 30 days,
+and a list of current wearers with the date they started, newest first.
+Only real on/off changes are counted; saving the same choice again is not.
+
 ## Sticker gifts in comments and messages
 
 Your earned stickers can be sent as gifts. Choose **🎁 Add sticker** under a
@@ -269,6 +285,8 @@ token. Responses, including picture bytes, use `Cache-Control: no-store`.
 | `conversations` | GET | Accepted friends, latest message and unread counts; participant and CSRF |
 | `messages` | GET | `participantId`, optional `before`; chronological `items` (each with `sticker: {id,name,url}` or `null`), `nextBefore` |
 | `messages` | POST | `requestId`, `participantId`, `body`, optional `sticker` (type ID; body may then be empty); message ID |
+| `badges` | GET | `fullTime`, `since` (ms or `null`), `version`, participant and CSRF |
+| `badges` | POST | `fullTime` boolean, loaded `version`; the saved setting (409 if another device changed it) |
 | `stickers` | GET | `stickers: [{id, name, url, quantity}]` for the sticker picker (available, unlisted stickers only) |
 | `messages/read` | POST | `participantId`, loaded message `seq`; monotonic read marker |
 | `messages/delete` | POST | Sender-owned message `id`; clears message text |
@@ -282,7 +300,8 @@ token. Responses, including picture bytes, use `Cache-Control: no-store`.
 | `activity` | GET | Optional `before`; `items`, `unread`, `latest`, `nextBefore`, participant and CSRF |
 | `activity/read` | POST | Notification `id` or last loaded `through` sequence |
 
-Admin-only `GET api/admin/social` accepts `view=reports/posts/restrictions`,
+Admin-only `GET api/admin/social` accepts `view=reports/posts/profiles/restrictions/badges`
+(`badges` adds `summary: {wearers, members, percent, enabled30, disabled30}`),
 optional `before`, or `postId` to inspect a post and its comments. Protected
 moderation pictures use `GET api/admin/social/picture?id=...`. Admin POST
 `api/admin/social` requires a reason and an action: `remove` with `kind` and
@@ -297,12 +316,19 @@ lock; access and duplicate checks run again inside the publishing transaction.
 
 ## Deployment and checks
 
+The 24/7 badge adds `social_badges` (current choice) and `social_badge_events`
+(on/off history) to `little-log.sqlite`, created at startup. Post authors gain a
+`fullTime` boolean. Deploy `server/social.mjs`, `server/api.mjs`,
+`lib/badge-settings.js`, `lib/social.js`, `app.js`, `index.html`, `styles.css`,
+`admin/social.js`, `admin/index.html`, `scripts/serve.mjs` and `sw.js` (cache
+`little-log-v106-full-time-badge`) together.
+
 Sticker gifts add a nullable `sticker` column to `social_comments` and
 `friend_messages` (added at startup) and a `sticker_gifts` receipt table in
 `market.sqlite`. Deploy `server/sticker-gifts.mjs`, `server/social.mjs`,
 `server/economy.mjs`, `server/reward-bridge.mjs`, `server/database.mjs`,
 `server/api.mjs`, `scripts/serve.mjs`, `lib/social.js`, `styles.css` and
-`sw.js` (cache `little-log-v105-sticker-gifts`) together, after backing up both
+`sw.js` together (these ship with the 24/7 badge cache above), after backing up both
 SQLite files. How the gift crosses the two databases is described in
 [ECONOMY_GUIDE.md](ECONOMY_GUIDE.md#sticker-gifts).
 

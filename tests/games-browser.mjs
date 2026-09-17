@@ -15,7 +15,7 @@ try{
   await page.$eval('#liquids',el=>{el.value='321';el.dispatchEvent(new Event('input',{bubbles:true}));});
   for(const theme of ['little-tracker','caregiver-tracker']){
     await navigateMenu(page,'[data-page="settings"]');await page.select('#theme-selector',theme);await navigateMenu(page,'[data-page="games"]');
-    assert.equal(await page.$eval('#page-games',el=>el.hidden),false);assert.equal(await page.$$eval('[data-game-link]',els=>els.length),4);
+    assert.equal(await page.$eval('#page-games',el=>el.hidden),false);assert.equal(await page.$$eval('[data-game-link]',els=>els.length),5);
     assert.equal(await page.$eval('#liquids',el=>el.value),'321');
     for(const width of [320,390,680,1024,1440]){await page.setViewport({width,height:1000});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`${theme} overflow at ${width}`);}
     await page.screenshot({path:resolve(directory,`${theme}-desktop.png`),fullPage:true});
