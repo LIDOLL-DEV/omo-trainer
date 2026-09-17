@@ -26,7 +26,7 @@ test('the companion is served from the tracker origin with its own assets', asyn
   const html = await page.text();
   assert.match(html, /LidollQuest-Companion/);
   assert.doesNotMatch(html, /<iframe/i);
-  for (const asset of ['companion/app.js', 'companion/style.css']) {
+  for (const asset of ['companion/app.js', 'companion/style.css', 'companion/paperdoll.js', 'companion/art.json', 'companion/assets/TQ_Base_3.png']) {
     const response = await fetch(`${origin}/tracker/${asset}`);
     assert.equal(response.status, 200, `${asset} must be served`);
   }

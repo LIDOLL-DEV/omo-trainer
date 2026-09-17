@@ -334,3 +334,10 @@ the fixed local `#messages` route for notification clicks.
 ## Security boundaries
 
 Read [SECURITY_ROLLOUT.md](SECURITY_ROLLOUT.md) before deployment. Await identity checks on every authenticated app, wallet, report and statistics route. Preserve the signed nonce-bound status check and fail closed after cache expiry. Never use a public client grant as minting authority: HTTP credit/refund operations require server signatures, for every currency. Keep signing keys out of public app metadata and shipped games. Internal ledger calls are trusted server primitives. Reserve upload slots before reading bodies, and keep reward budgets and automatic-post limits inside their record transactions.
+
+
+## Complete companion character view
+
+The companion now shows the selected owned character's equipment, carried inventory with rolled stats, health/MP/core/needs stats, layered paperdoll and Tush Status alongside the bank. It follows current/latest online presence by default or a manually selected character, refreshing every 15 seconds while visible. Reads never acquire the game's controller lease. The private sheet comes from committed online state or a non-stale cloud save; public player inspection is unchanged. Unsynced local progress is unavailable and the source is labeled.
+
+Deploy the matching quest service first, then Little Log including companion/paperdoll.js, art.json, assets/ and the static allowlist. Game-side python/export_companion_assets.py exports existing TQ artwork and item metadata. Browser portraits use original flat layers and state variants; GameMaker's bulk/shader deformation stays in the game. No new game client or database reset is needed. Existing bank sale rights, receipts and daily cap remain authoritative.

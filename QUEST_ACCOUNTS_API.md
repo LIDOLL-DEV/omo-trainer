@@ -32,3 +32,10 @@ Settings > Friends playing LiDollQuest is an optional push preference (`friendGa
 The existing scoped Quest social POST accepts `{action:"presence",session:"unique-window-id",playing:true}`; the authenticated grant determines the owner. Session IDs contain 8-80 letters, digits, underscores or hyphens. Heartbeats are expected every 30 seconds and expire after 90 seconds. Multiple windows coalesce; repeated starts have a five-minute notification cooldown. Send `playing:false` on leaving play. GET social and Friends rows expose `playing` and `gameStarted` only to accepted friends.
 
 Additive SQLite tables preserve existing accounts, friendships, subscriptions and records. Deploy the tracker service/UI before the rebuilt game. `tests/game-presence.test.mjs` covers ownership, duplicate heartbeats, expiry, multiwindow behavior, push opt-in, quiet hours and unfriend suppression. The game repository also contains real two-player and tracker UI browser fixtures under `python/tests/fixtures/friend_activity*`.
+
+
+## Complete companion character view
+
+The companion now shows the selected owned character's equipment, carried inventory with rolled stats, health/MP/core/needs stats, layered paperdoll and Tush Status alongside the bank. It follows current/latest online presence by default or a manually selected character, refreshing every 15 seconds while visible. Reads never acquire the game's controller lease. The private sheet comes from committed online state or a non-stale cloud save; public player inspection is unchanged. Unsynced local progress is unavailable and the source is labeled.
+
+Deploy the matching quest service first, then Little Log including companion/paperdoll.js, art.json, assets/ and the static allowlist. Game-side python/export_companion_assets.py exports existing TQ artwork and item metadata. Browser portraits use original flat layers and state variants; GameMaker's bulk/shader deformation stays in the game. No new game client or database reset is needed. Existing bank sale rights, receipts and daily cap remain authoritative.

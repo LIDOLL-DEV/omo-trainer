@@ -80,3 +80,6 @@ New Little Log accounts start with 50 lid0llcoins, credited once through registr
 Report output now permits 256–50,000 tokens and defaults to 50,000. Migration raises the active setting once; existing queued snapshots retain their original token limit, and subsequent custom settings survive restarts. The model must have sufficient context. See [AI_ANALYSIS_GUIDE.md](AI_ANALYSIS_GUIDE.md).
 
 Nightly reports are exported to MommyBot after completion. Manual prompt-tuning runs remain private unless the administrator uses **Run and share with MommyBot** to queue an explicitly shared on-demand report.
+
+
+Companion artwork and item metadata are exported from LiDollQuest with python/export_companion_assets.py in the game checkout. Refresh those assets after editing Items or TQ sprites; no tracker record or game world generation changes are involved.

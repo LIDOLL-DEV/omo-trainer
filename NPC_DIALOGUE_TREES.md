@@ -45,3 +45,6 @@ The admin-only AI analysis panel distinguishes queued, running, completed, faile
 ## Welcome grant copy
 
 The wallet records **Welcome bonus: 50 lid0llcoins** once for each newly created Little Log account. This is wallet history, not an NPC event or a daily check-in announcement.
+
+
+Companion portraits display authored character appearance/equipment and Tush Status; they do not run NPC dialogue or alter public in-game inspection.

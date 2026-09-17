@@ -215,3 +215,6 @@ Use **Notifications** in the top bar to open your Social notification history.
 - Open Social > Profile to see your picture and posts, or click another person's
   name to visit their profile. Profiles only show posts shared with you.
 - Use Edit profile picture on your own profile to open its Settings controls.
+
+
+Companion: check current/manual character selection, equipment, inventory, paperdoll, Tush Status and stats; bank paging and sales must keep the selected character. No-data characters clear old details; unlinking clears all private panels.
