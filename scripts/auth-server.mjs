@@ -1,5 +1,5 @@
 import {requestBoundary} from '../server/request-boundary.mjs';
-import {walletIdentity,walletScopes} from '../auth/wallet-identity.mjs';
+import {walletIdentity,walletScopes,questScopes} from '../auth/wallet-identity.mjs';
 import http from 'node:http';
 import { createHmac, timingSafeEqual, createPrivateKey, sign } from 'node:crypto';
 import Provider from 'oidc-provider';
@@ -11,8 +11,8 @@ const config = loadAuthConfig();
 const store = openAuthStore();
 const secure = config.issuer.startsWith('https:');
 export const provider = new Provider(config.issuer, {
-  clients: config.clients.map(client=>({...client,scope:client.scope??['openid','profile',...(client.client_id==='lidollbot'?walletScopes:[])].join(' ')})),
-  scopes:['openid','profile',...walletScopes], adapter: store.Adapter, jwks: config.jwks,
+  clients: config.clients.map(client=>({...client,scope:client.scope??['openid','profile',...(client.client_id==='lidollbot'?walletScopes:client.client_id==='lidollquest'?[...walletScopes,...questScopes]:[])].join(' ')})),
+  scopes:['openid','profile',...walletScopes,...questScopes], adapter: store.Adapter, jwks: config.jwks,
   cookies: { keys: config.cookieKeys, long: { secure, sameSite: 'lax' }, short: { secure, sameSite: 'lax' } },
   features: { devInteractions: { enabled: false } },
   pkce: { required: () => true },

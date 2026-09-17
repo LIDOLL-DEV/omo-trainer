@@ -1,5 +1,6 @@
 import {requireRewardAuthority} from './reward-authority.mjs';
 import {questProxy} from './quest-proxy.mjs';
+import {questRoutes,questScope,questSocialApi,requireQuestMethod} from './quest-account-api.mjs';
 ﻿import {cookie} from './login.mjs';
 const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fail=(status,message)=>{throw Object.assign(new Error(message),{status});};
@@ -24,13 +25,13 @@ export async function coinBrowserApi(database,login,request,response,route) { //
       call('app','lidollquest');
       const approved=call('browserApproved',session.participant.id);
       response.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store',Vary:'Cookie','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",'Referrer-Policy':'same-origin'});
-      return response.end(`<!doctype html><html lang="en" data-theme="little-tracker"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fff5fa"><title>Link LiDollQuest</title><link rel="stylesheet" href="${base}styles.css"><link rel="stylesheet" href="${base}themes.css"><link rel="stylesheet" href="${base}coins/style.css"><script defer src="${base}coins/browser.js"></script></head><body class="coins-connect"><main class="card"><h1>${approved?'Returning to LiDollQuest...':'Link LiDollQuest'}</h1><p>Signed in as <strong>${escape(session.participant.label)}</strong></p><p>${approved?'Your wallet access is already approved.':'Allow LiDollQuest to read, earn and spend your LiDollCoins and stars. Spending stars keeps your potty-chart progress.'}</p><form id="game-consent" method="post" action="${path}connect" data-approved="${approved}"><input type="hidden" name="view" value="${embedded?'embedded':'standalone'}"><input type="hidden" name="csrf" value="${escape(session.csrf)}"><button name="decision" value="allow" id="allow">${approved?'Continue to game':'Allow and return to game'}</button><button name="decision" value="deny">Cancel</button></form><p><a href="${base}auth/login?returnTo=${loginReturn}&amp;reauth=1">Use another account</a></p></main></body></html>`);
+      return response.end(`<!doctype html><html lang="en" data-theme="little-tracker"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fff5fa"><title>Link LiDollQuest</title><link rel="stylesheet" href="${base}styles.css"><link rel="stylesheet" href="${base}themes.css"><link rel="stylesheet" href="${base}coins/style.css"><script defer src="${base}coins/browser.js"></script></head><body class="coins-connect"><main class="card"><h1>${approved?'Returning to LiDollQuest...':'Link LiDollQuest'}</h1><p>Signed in as <strong>${escape(session.participant.label)}</strong></p><p>${approved?'Your wallet access is already approved.':'Allow LiDollQuest to read, earn and spend your LiDollCoins and stars, show your account display name, manage your Little Log friends, and store and restore your game saves. Your tracking records stay private.'}</p><form id="game-consent" method="post" action="${path}connect" data-approved="${approved}"><input type="hidden" name="view" value="${embedded?'embedded':'standalone'}"><input type="hidden" name="csrf" value="${escape(session.csrf)}"><button name="decision" value="allow" id="allow">${approved?'Continue to game':'Allow and return to game'}</button><button name="decision" value="deny">Cancel</button></form><p><a href="${base}auth/login?returnTo=${loginReturn}&amp;reauth=1">Use another account</a></p></main></body></html>`);
     }
     let input;
     if(request.method==='POST') {
       if(origin!==login.origin)fail(403,'This request must come from the game website.');
       let size=0;const chunks=[];
-      for await(const chunk of request){size+=chunk.length;if(size>(route==='zones/action'?256*1024:8192))fail(413,'Request too large.');chunks.push(chunk);} // Gameplay carries inventory and stats; match the Quest service's 256 KiB limit while keeping wallet requests at 8 KiB.
+      for await(const chunk of request){size+=chunk.length;if(size>(['zones/action','cloud/action'].includes(route)?256*1024:8192))fail(413,'Request too large.');chunks.push(chunk);} // Save chunks fit the gameplay bound without raising ordinary wallet limits.
       const text=Buffer.concat(chunks).toString('utf8'),type=request.headers['content-type']??'';
       if(route==='connect'&&type.startsWith('application/x-www-form-urlencoded'))input=Object.fromEntries(new URLSearchParams(text));
       else if(type.startsWith('application/json')){try{input=JSON.parse(text);}catch{fail(400,'Invalid JSON.');}}
@@ -54,7 +55,11 @@ export async function coinBrowserApi(database,login,request,response,route) { //
       throw error;
     }
     if(route==='session'&&request.method==='GET')return send(200,session);
+    const expectedAccount=new URL(request.url,login.origin).searchParams.get('expected_account');
+    if(expectedAccount&&expectedAccount!==session.account_id)throw Object.assign(Error('Your account changed in another window. Refreshing your connection.'),{status:409,code:'account_changed'});
     if(request.method==='POST'&&request.headers['x-csrf-token']!==session.csrf)fail(403,'Refresh your game connection before saving wallet changes.');
+    if(route==='social')return send(200,questSocialApi(database,secret,request.method,new URL(request.url,login.origin).searchParams,input));
+    if(questRoutes.has(route)){requireQuestMethod(route,request.method);call('grant',secret,questScope(route,request.method));return send(200,await questProxy(secret,route,new URL(request.url,login.origin).searchParams,input));}
     if(route==='zones'&&request.method==='GET')return send(200,await questProxy(secret,route,new URL(request.url,login.origin).searchParams));
     if(route==='zones/action'&&request.method==='POST')return send(200,await questProxy(secret,route,null,input));
     if(route==='operations'&&request.method==='POST'){requireRewardAuthority('lidollquest',secret,input,request.headers['x-reward-signature']);return send(200,call('operation',secret,input));}

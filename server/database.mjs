@@ -1,6 +1,7 @@
 import {createActivity} from './activity.mjs';
 import {createSocial} from './social.mjs';
 import {createFriends} from './friends.mjs';
+import {createQuestSocial} from './quest-social.mjs';
 import {createNotifications} from './notifications.mjs';
 import {createAnalysisStore} from './ai-analysis.mjs';
 import {createStatistics} from './statistics.mjs';
@@ -121,6 +122,7 @@ export function openDatabase(filename = databasePath(), options = {}) { // Opens
       db.prepare(`INSERT INTO participants (id, label, issuer, subject, created_at) VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(issuer, subject) DO UPDATE SET label=excluded.label`).run(id,name,issuer,subject,new Date().toISOString());
       if(!existing)economy.awardRegistration(id);
+      questSocial.register(id); // Keep the app-specific identity index current as accounts register.
       db.exec('COMMIT');
     }catch(error){db.exec('ROLLBACK');throw error;}
     economy.tryFlush(); // A market outage leaves the durable grant pending without preventing registration or sign-in.
@@ -254,6 +256,7 @@ export function openDatabase(filename = databasePath(), options = {}) { // Opens
   for (const {alias, canonical} of options.stickerDuplicates ?? STICKER_DUPLICATES) if (stickerTypes.has(canonical)) stickerTypes.set(alias, stickerTypes.get(canonical)); // Merged duplicate IDs display the surviving design.
   const stickerInfo = id => stickerTypes.get(id) ?? {id, name: 'Sticker', url: null}; // Retired assets still show a labelled placeholder.
   const friends=createFriends(db,recordFromRow,{avatarInfo:id=>social.avatarInfo(id),onRemove:(a,b)=>{notifications.community.restrictPair(a,b);activity.prune(a);activity.prune(b);}});
+  const questSocial=createQuestSocial(db,friends);
   const activity=createActivity(db,{now:options.now,canSee:row=>social.activityVisible(row)});
   const socialCore=createSocial(db,friends,{now:options.now,activity,stickerInfo});
   const stickerGifts=createStickerGifts(socialCore,economy); // Comments/messages with a sticker move it to the recipient's inventory first.
@@ -263,7 +266,7 @@ export function openDatabase(filename = databasePath(), options = {}) { // Opens
   const statistics=createStatistics(db,admin,options.statistics); // Scoped device reads reuse the same saved-record aggregation as admin reports.
   return {
     identity, identityStatus, activity, social, friends, statistics, aiAnalysis, notifications, economy, admin, ensureParticipant, createSession:sessions.create, session:sessions.read, sessionNow:sessions.now, saveLogin, takeLogin, records, sync, exportRows, growthChart, saveGrowthChart, migrateIssuer,
-    deleteSession:sessions.remove,
+    questSocial,deleteSession:sessions.remove,
     exportCharts: () => db.prepare('SELECT participant_id, payload_json, version, updated_at FROM growth_charts ORDER BY participant_id').all().map(row => ({ participantId: row.participant_id, chart: JSON.parse(row.payload_json), version: row.version, updatedAt: row.updated_at })), // Private administrator export, separate from observation CSV.
     list: () => db.prepare('SELECT id, label, created_at FROM participants ORDER BY created_at').all(),
     backup: destination => backup(db, destination), // Uses SQLite's online backup API so WAL data is included consistently.

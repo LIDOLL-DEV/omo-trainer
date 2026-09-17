@@ -16,6 +16,30 @@ async function fixture(run) {
   try {await run({db,alice,bob,base,login,post});}finally{await new Promise(r=>server.close(r));db.close();}
 }
 
+test('Quest social/cloud routes require expanded consent, correct verbs and browser CSRF while native grants share friendships',()=>fixture(async({db,alice,bob,base,login,post})=>{
+ const call=(method,...args)=>db.economy.coins(method,...args);
+ const native=(user,scope)=>{const d=call('begin',{client_id:'lidollquest',scope},'quest-test');call('approve',user.id,{user_code:d.user_code,approve:true});return call('token',{client_id:'lidollquest',device_code:d.device_code,grant_type:'urn:ietf:params:oauth:grant-type:device_code'}).access_token;};
+ const legacy=native(alice,'wallet:read'),external=login.origin+'/tracker/api/lidollcoin/v1/';
+ for(const route of ['social','cloud','zones/inspect'])assert.equal((await fetch(external+route+'?client_id=lidollquest',{headers:{Authorization:'Bearer '+legacy}})).status,403);
+ assert.equal((await fetch(external+'wallet?client_id=lidollquest',{headers:{Authorization:'Bearer '+legacy}})).status,200,'old currency permissions remain usable');
+ const a=call('browserIssue',alice.id),b=native(bob,'wallet:read social:read social:write saves:read saves:write'),headers={Cookie:'lidollquest_wallet='+a,'X-CSRF-Token':call('browserSession',a).csrf};
+ const switched=await fetch(base+'social?expected_account='+call('balance',b).account_id,{headers});assert.equal(switched.status,409);assert.equal((await switched.json()).error,'account_changed');
+ const target=call('balance',b).account_id,input={action:'request',account_id:target};
+ assert.equal((await post('social',input,{Cookie:headers.Cookie})).status,403);
+ assert.equal((await post('social',input,{...headers,Origin:'https://evil.invalid'})).status,403);
+ const request=await (await post('social',input,headers)).json();assert.ok(request.id);
+ const nativeHeaders={Authorization:'Bearer '+b,'Content-Type':'application/json'};
+ const incoming=await (await fetch(external+'social?client_id=lidollquest',{headers:nativeHeaders})).json();assert.equal(incoming.friends[0].id,request.id);
+ assert.equal((await fetch(external+'social?client_id=lidollquest',{method:'POST',headers:nativeHeaders,body:JSON.stringify({action:'accept',id:request.id})})).status,200);
+ assert.equal(db.friends.list(alice.id)[0].state,'accepted');
+ assert.equal((await fetch(external+'cloud?client_id=lidollquest',{method:'DELETE',headers:nativeHeaders})).status,405);
+ assert.equal((await fetch(base+'cloud/action',{headers})).status,405);
+ assert.equal((await post('cloud/action',{action:'begin'}, {Cookie:headers.Cookie})).status,403);
+ db.admin.bootstrap(alice.id);const row=db.admin.users(alice.id).find(u=>u.id===bob.id);db.admin.updateUser(alice.id,{action:'update',id:bob.id,role:'participant',disabled:true,version:row.version});
+ assert.equal((await fetch(external+'social?client_id=lidollquest',{headers:nativeHeaders})).status,401);
+ assert.equal((await (await fetch(base+'social',{headers})).json()).friends.length,0);
+}));
+
 test('browser sign-in requires consent and creates a wallet-only HttpOnly session with a fixed return URL',()=>fixture(async({db,alice,base,login,post})=>{
   const guest=await fetch(base+'connect',{redirect:'manual'});assert.equal(guest.status,303);assert.equal(guest.headers.get('location'),'/tracker/auth/login?returnTo=game-wallet');
   assert.deepEqual(await (await fetch(base+'session')).json(),{linked:false});

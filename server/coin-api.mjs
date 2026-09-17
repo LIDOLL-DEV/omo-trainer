@@ -1,6 +1,7 @@
 import {requireRewardAuthority} from './reward-authority.mjs';
 import {questProxy} from './quest-proxy.mjs';
 import {verifyWalletIdentity} from './coin-identity.mjs';
+import {questRoutes,questScope,questSocialApi,requireQuestMethod} from './quest-account-api.mjs';
 export async function coinApi(database,login,request,response,route) { // Bearer-only external routes have explicit per-app CORS and never use browser session cookies.
   const send=(status,value)=>{response.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store',Vary:'Origin, Authorization'});response.end(JSON.stringify(value));};
   try {
@@ -13,7 +14,7 @@ export async function coinApi(database,login,request,response,route) { // Bearer
     let input;
     if(request.method==='POST') {
       const chunks=[];let size=0;
-      for await(const chunk of request){size+=chunk.length;if(size>8192)throw Object.assign(Error('Request too large.'),{status:413});chunks.push(chunk);}
+      for await(const chunk of request){size+=chunk.length;if(size>(['zones/action','cloud/action'].includes(route)?262144:8192))throw Object.assign(Error('Request too large.'),{status:413});chunks.push(chunk);}
       const text=Buffer.concat(chunks).toString('utf8'),type=request.headers['content-type']??'';
       if(type.startsWith('application/json')){try{input=JSON.parse(text);}catch{throw Object.assign(Error('Invalid JSON.'),{status:400});}}
       else if(type.startsWith('application/x-www-form-urlencoded')&&['device','token'].includes(route))input=Object.fromEntries(new URLSearchParams(text));
@@ -38,6 +39,8 @@ export async function coinApi(database,login,request,response,route) { // Bearer
     if(identity.client!==clientId)throw Object.assign(Error('Token belongs to another app.'),{status:403});
     if(clientId==='lidollquest'&&request.method==='GET'&&route==='zones')return send(200,await questProxy(secret,route,url.searchParams));
     if(clientId==='lidollquest'&&request.method==='POST'&&route==='zones/action')return send(200,await questProxy(secret,route,null,input));
+    if(clientId==='lidollquest'&&route==='social')return send(200,questSocialApi(database,secret,request.method,url.searchParams,input));
+    if(clientId==='lidollquest'&&questRoutes.has(route)){requireQuestMethod(route,request.method);call('grant',secret,questScope(route,request.method));return send(200,await questProxy(secret,route,url.searchParams,input));}
     if(request.method==='GET'&&route==='wallet')return send(200,call('balance',secret));
     if(request.method==='POST'&&route==='operations'){requireRewardAuthority(clientId,secret,input,request.headers['x-reward-signature']);return send(200,call('operation',secret,input));}
     if(request.method==='POST'&&route==='revoke')return send(200,call('revoke',identity.owner,identity.id));

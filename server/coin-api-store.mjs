@@ -35,6 +35,7 @@ export function createCoinApiStore(db,wallet,adjust,enabled,apps=coinApps(),now=
   try {
     if(!db.prepare('PRAGMA table_info(coin_game_operations)').all().some(c=>c.name==='asset'))db.exec("ALTER TABLE coin_game_operations ADD COLUMN asset TEXT NOT NULL DEFAULT 'coins'");
     if(!db.prepare('PRAGMA table_info(coin_browser_permissions)').all().some(c=>c.name==='stars_allowed'))db.exec('ALTER TABLE coin_browser_permissions ADD COLUMN stars_allowed INTEGER NOT NULL DEFAULT 0');
+    if(!db.prepare('PRAGMA table_info(coin_browser_permissions)').all().some(c=>c.name==='quest_allowed'))db.exec('ALTER TABLE coin_browser_permissions ADD COLUMN quest_allowed INTEGER NOT NULL DEFAULT 0');
     db.exec('COMMIT');
   }catch(error){db.exec('ROLLBACK');throw error;}
   function app(id) {const value=apps.find(item=>item.id===id);if(!value)fail(401,'Unknown external app.','invalid_client');return value;} // Resolve only pre-registered app IDs.
@@ -47,7 +48,7 @@ export function createCoinApiStore(db,wallet,adjust,enabled,apps=coinApps(),now=
   function begin(input,address) { // The game holds a high-entropy device secret; the player confirms a separate human-readable code.
     const client=app(input?.client_id);rate('device:'+client.id+':'+hash(address),60);
     const scopes=String(input.scope??'wallet:read wallet:write').split(' ').filter(Boolean);
-    if(!scopes.length||scopes.some(s=>!['wallet:read','wallet:write','stars:read','stars:write','diamonds:read','diamonds:write'].includes(s)))fail(400,'Unsupported scope.','invalid_scope');
+    if(!scopes.length||scopes.some(s=>!['wallet:read','wallet:write','stars:read','stars:write','diamonds:read','diamonds:write',...(client.id==='lidollquest'?['social:read','social:write','saves:read','saves:write']:[])].includes(s)))fail(400,'Unsupported scope.','invalid_scope');
     db.prepare('DELETE FROM coin_devices WHERE expires<?').run(now());
     if(db.prepare('SELECT COUNT(*) AS n FROM coin_devices WHERE client=?').get(client.id).n>=1000)fail(429,'This app has too many pending connections.','slow_down');
     const device=randomBytes(32).toString('base64url'),code=randomBytes(6).toString('hex').toUpperCase();
@@ -103,18 +104,18 @@ export function createCoinApiStore(db,wallet,adjust,enabled,apps=coinApps(),now=
   function balance(secret) { // Keep the legacy coin response intact; expose stars only with explicit read permission.
     const value=grant(secret),scopes=value.scope.split(' '),funds=wallet(value.owner);
     if(!['wallet:read','stars:read','diamonds:read'].some(scope=>scopes.includes(scope)))fail(403,'This connection lacks read permission.','insufficient_scope');
-    return {account_id:hash(value.client+':'+value.owner),...(scopes.includes('wallet:read')?{currency:'LiDollCoin',balance:funds.coins}:{}),...(scopes.includes('stars:read')?{stars:funds.stars,stars_enabled:scopes.includes('stars:write')}:{}),...(scopes.includes('diamonds:read')?{diamonds:funds.diamonds,diamonds_enabled:scopes.includes('diamonds:write'),diamond_coin_value:50}:{})}; // Existing grants gain no diamond access until the participant consents.
+    return {account_id:hash(value.client+':'+value.owner),scope:value.scope,quest_features:value.client==='lidollquest',...(scopes.includes('wallet:read')?{currency:'LiDollCoin',balance:funds.coins}:{}),...(scopes.includes('stars:read')?{stars:funds.stars,stars_enabled:scopes.includes('stars:write')}:{}),...(scopes.includes('diamonds:read')?{diamonds:funds.diamonds,diamonds_enabled:scopes.includes('diamonds:write'),diamond_coin_value:50}:{})}; // Existing grants gain no additional scopes until the participant consents.
   }
   function connections(owner) {return db.prepare('SELECT id,client,scope,created_at AS createdAt,expires FROM coin_grants WHERE owner=? AND revoked=0 AND expires>? ORDER BY created_at DESC').all(owner,now()).map(value=>({...value,name:apps.find(a=>a.id===value.client)?.name??value.client}));}
   function revoke(owner,id) {if(db.prepare('SELECT 1 FROM coin_browser_grants b JOIN coin_grants g ON g.id=b.grant_id WHERE g.owner=? AND g.id=?').get(owner,id))db.prepare('DELETE FROM coin_browser_permissions WHERE owner=? AND client=?').run(owner,'lidollquest');db.prepare('UPDATE coin_grants SET revoked=1 WHERE owner=? AND id=?').run(owner,id);return {ok:true};}
-  function browserApproved(owner) {return Boolean(db.prepare('SELECT 1 FROM coin_browser_permissions WHERE owner=? AND client=? AND stars_allowed=1').get(owner,'lidollquest'));}
+  function browserApproved(owner) {return Boolean(db.prepare('SELECT 1 FROM coin_browser_permissions WHERE owner=? AND client=? AND stars_allowed=1 AND quest_allowed=1').get(owner,'lidollquest'));}
   function browserIssue(owner,previous) { // Reuse the same wallet ledger and receipts, but never expose this session secret to game code.
     if(!enabled(owner))fail(403,'Account access is disabled.');app('lidollquest');
     return atomic(()=>{const secret=randomBytes(32).toString('base64url'),id=randomUUID();
       if(typeof previous==='string')db.prepare('UPDATE coin_grants SET revoked=1 WHERE token_hash=? AND id IN (SELECT grant_id FROM coin_browser_grants)').run(hash(previous)); // Rotate only this browser session; other connected devices stay signed in.
-      db.prepare('INSERT INTO coin_grants VALUES (?,?,?,?,?,?,?,0)').run(id,hash(secret),owner,'lidollquest','wallet:read wallet:write stars:read stars:write',now(),now()+30*86400000);
+      db.prepare('INSERT INTO coin_grants VALUES (?,?,?,?,?,?,?,0)').run(id,hash(secret),owner,'lidollquest','wallet:read wallet:write stars:read stars:write social:read social:write saves:read saves:write',now(),now()+30*86400000);
       db.prepare('INSERT INTO coin_browser_grants VALUES (?)').run(id);
-      db.prepare('INSERT INTO coin_browser_permissions(owner,client,stars_allowed) VALUES (?,?,1) ON CONFLICT(owner,client) DO UPDATE SET stars_allowed=1').run(owner,'lidollquest');
+      db.prepare('INSERT INTO coin_browser_permissions(owner,client,stars_allowed,quest_allowed) VALUES (?,?,1,1) ON CONFLICT(owner,client) DO UPDATE SET stars_allowed=1,quest_allowed=1').run(owner,'lidollquest');
       return secret;
     });
   }
