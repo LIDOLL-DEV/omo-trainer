@@ -23,24 +23,33 @@ const server=createServer(async(req,res)=>{
 await new Promise(r=>server.listen(0,'127.0.0.1',r));login.origin='http://127.0.0.1:'+server.address().port;let browser;
 try{
  browser=await puppeteer.launch({executablePath:process.env.CHROME_PATH,headless:true,pipe:true});const context=await browser.createBrowserContext();await context.setCookie({name:'little_log',value:token,url:login.origin+'/tracker/',path:'/tracker/',httpOnly:true});const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.setViewport({width:390,height:900});await page.goto(login.origin+'/tracker/admin/#notifications',{waitUntil:'networkidle0'});await page.waitForFunction(()=>document.querySelector('#push-audience').textContent.includes('2 opted-in'));
+ await page.setViewport({width:390,height:900});await page.goto(login.origin+'/tracker/admin/#notifications',{waitUntil:'networkidle0'});await page.waitForFunction(()=>document.querySelector('#push-audience').textContent.includes('2 members in-app'));
  assert.equal(await page.$eval('.admin-filters',node=>node.hidden),true);assert.equal(await page.$eval('#push-send',node=>node.disabled),true);
  assert.match(await page.$eval('#push-readiness',node=>node.textContent),/Write a message/);
- configured=false;await page.click('#push-reload');await page.waitForFunction(()=>document.querySelector('#push-readiness').textContent.includes('PUSH_VAPID_PUBLIC_KEY'));assert.equal(await page.$eval('#push-send',node=>node.disabled),true);
- configured=true;await page.click('#push-reload');await page.waitForFunction(()=>document.querySelector('#push-readiness').textContent.includes('Write a message'));
+ await page.type('#push-body','Hello <img src=x onerror=alert(1)>!');assert.equal(await page.$('#push-preview-body img'),null);
+ await page.waitForFunction(()=>document.querySelector('#push-readiness').textContent.includes('2 devices also get a push'));assert.equal(await page.$eval('#push-send',node=>node.disabled),false);
+ // Without Web Push configured the composer still sends: every member gets the in-app copy, only the lock-screen alert is lost.
+ configured=false;await page.click('#push-reload');await page.waitForFunction(()=>document.querySelector('#push-readiness').textContent.includes('PUSH_VAPID_PUBLIC_KEY'));assert.equal(await page.$eval('#push-send',node=>node.disabled),false);
+ configured=true;await page.click('#push-reload');await page.waitForFunction(()=>document.querySelector('#push-readiness').textContent.includes('2 devices also get a push'));
  overviewFails=true;await page.click('#push-reload');await page.waitForFunction(()=>document.querySelector('#push-readiness').textContent.includes('Synthetic availability outage'));assert.equal(await page.$eval('#push-send',node=>node.disabled),true);
- overviewFails=false;await page.click('#push-reload');await page.waitForFunction(()=>document.querySelector('#push-readiness').textContent.includes('Write a message'));
- await page.select('#push-recipient',a.id);await page.type('#push-body','Hello <img src=x onerror=alert(1)>!');assert.equal(await page.$('#push-preview-body img'),null);assert.match(await page.$eval('#push-audience',node=>node.textContent),/^1 opted-in/);
- await page.click('#push-send');await page.waitForFunction(()=>document.querySelector('#push-status').textContent.startsWith('Notification queued'));
+ overviewFails=false;await page.click('#push-reload');await page.waitForFunction(()=>document.querySelector('#push-readiness').textContent.includes('2 devices also get a push'));
+ await page.select('#push-recipient',a.id);assert.match(await page.$eval('#push-audience',node=>node.textContent),/^1 member in-app \/ 1 device with push/);
+ await page.click('#push-send');await page.waitForFunction(()=>document.querySelector('#push-status').textContent.startsWith('Sent.'));
+ assert.equal(db.activity.list(a.id).items[0].body,'Hello <img src=x onerror=alert(1)>!','In-app copy is stored before any push is attempted');
  await db.notifications.tick();assert.equal(delivered.length,1);assert.equal(delivered[0].sub.endpoint,sub(a.id).endpoint);assert.equal(delivered[0].payload.body,'Hello <img src=x onerror=alert(1)>!');
  await page.click('#push-reload');await page.waitForFunction(()=>document.querySelector('#push-history tbody td:nth-child(4)')?.textContent==='1');assert.equal(await page.$('#push-history img'),null);
- await page.select('#push-recipient','');await page.type('#push-body','Everyone gets a note.');await page.click('#push-send');await page.waitForSelector('#push-history button:not(:disabled)');await page.click('#push-history button');await page.waitForFunction(()=>document.querySelector('#push-status').textContent.includes('cancelled'));
+ await page.select('#push-recipient','');await page.type('#push-body','Everyone gets a note.');await page.click('#push-send');await page.waitForSelector('#push-history button:not(:disabled)');await page.click('#push-history button');await page.waitForFunction(()=>document.querySelector('#push-status').textContent.startsWith('Cancelled'));
  await db.notifications.tick();assert.equal(delivered.length,1,'Cancelled announcement must not send');
+ assert.equal(db.activity.list(b.id).items.some(item=>item.body==='Everyone gets a note.'),false,'Cancelling also retracts the unread in-app copies');
+ // A member with push turned off stays in the audience: they simply receive the message in-app only.
+ await page.type('#push-body','In-app only.');await page.select('#push-recipient',b.id);db.notifications.remove(b.id,{all:true});await page.click('#push-reload');await page.waitForFunction(()=>document.querySelector('#push-audience').textContent.startsWith('1 member in-app / 0 devices with push'));
+ assert.equal(await page.$eval('#push-recipient',node=>node.value),b.id);assert.equal(await page.$eval('#push-send',node=>node.disabled),false);
+ assert.match(await page.$eval('#push-readiness',node=>node.textContent),/No devices have opted into push/);
  // Losing a selected recipient never silently changes an individual message into a broadcast.
- await page.select('#push-recipient',b.id);db.notifications.remove(b.id,{all:true});await page.click('#push-reload');await page.waitForFunction(()=>document.querySelector('#push-audience').textContent.startsWith('0 opted-in'));assert.equal(await page.$eval('#push-recipient',node=>node.value),b.id);
- assert.match(await page.$eval('#push-readiness',node=>node.textContent),/This member has no device/);
- await page.select('#push-recipient','');db.notifications.remove(a.id,{all:true});await page.click('#push-reload');await page.waitForFunction(()=>document.querySelector('#push-readiness').textContent.startsWith('No devices'));
- assert.match(await page.$eval('#push-readiness',node=>node.textContent),/Messages from admins/);
+ const disable=user=>db.admin.updateUser(admin.id,{action:'update',id:user.id,role:'participant',disabled:true,version:db.admin.users(admin.id).find(row=>row.id===user.id).version});
+ disable(b);await page.click('#push-reload');await page.waitForFunction(()=>document.querySelector('#push-readiness').textContent.includes('can no longer receive notifications'));
+ assert.equal(await page.$eval('#push-recipient',node=>node.value),b.id);assert.equal(await page.$eval('#push-send',node=>node.disabled),true);
+ await page.select('#push-recipient','');disable(a);await page.click('#push-reload');await page.waitForFunction(()=>document.querySelector('#push-readiness').textContent.startsWith('No enabled members'));
  for(const width of [320,390,1024]){await page.setViewport({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);}
  await page.type('#push-body','Private draft');db.deleteSession(token);await page.click('#push-reload');await page.waitForSelector('#admin-gate:not([hidden])');assert.equal(await page.$eval('#push-body',node=>node.value),'');assert.equal(await page.$eval('#push-history',node=>node.childElementCount),0);
  assert.deepEqual(errors,[]);console.log('PASS: admin composer, explicit audience, literal preview, real queue and cancellation, mobile layout, disabled-button explanations, availability failures and recovery, and session-revocation cleanup (push transport mocked).');

@@ -183,7 +183,19 @@ the updated Nginx upload location alongside the backend and frontend changes.
 
 Social reactions and activity: likes/comments/post notices commit with their
 source content. server/activity.mjs stores account history separately from
-device delivery. Preserve default-on social preference columns only at their
+device delivery.
+
+Admin messages: server/notification-messages.mjs writes one in-app copy per
+recipient through `activity.record()` inside the queue transaction, then queues
+push deliveries only for members whose `admin_messages` is 1. In-app delivery is
+the baseline and must never depend on `configured` (VAPID keys), on a push
+subscription, or on quiet hours; those gate the device push only. `recipients()`
+returns every enabled participant except the sending admin and reports
+`subscriptions` as the push-device count, which may be 0. The stored `members`
+column counts the copies that actually landed, so history reports real reach.
+Cancelling a message skips queued device deliveries and calls
+`activity.withdrawSource()`, which retracts unread in-app copies only: never
+withdraw one a member has already read. Preserve default-on social preference columns only at their
 initial migration; never reset saved opt-outs. Check live audiences at read and
 delivery time, and keep withdrawn notification receipts to prevent replay.
 Admin social moderation requires a current role, CSRF and a reason; only

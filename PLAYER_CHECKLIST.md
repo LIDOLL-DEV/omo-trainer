@@ -168,6 +168,11 @@ Use **Run and share with MommyBot** to request an on-demand report for the bot's
 - Activity includes saved push notifications. Community-support notices appear
   only while Community support is enabled in Settings; other push history remains
   visible when that option is off.
+- Messages from Little Log admins always arrive on your Notifications page, even
+  if you never turned push notifications on, or your device cannot do push at all
+  (for example a browser without a Home Screen install). The **Messages from
+  admins** checkbox in Settings only decides whether you also get a lock-screen
+  alert; unchecking it never hides the message from Notifications.
 
 Social groups Post, Feed, Friends & search, Messaging, Notifications and Profile behind
 one main-menu tab. Use Friends & search in the bottom bar to manage friends

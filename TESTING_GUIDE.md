@@ -164,6 +164,27 @@ counts and pushes, retries, safe payloads, read cancellation, opt-out, deletion,
 friendship revocation and disabled senders. The notifications browser suite also
 checks the saved New messages preference across reloads and re-enrollment.
 
+## In-app admin messages (2026-09-17)
+
+`npm test` includes `tests/notification-messages.test.mjs`, which now asserts
+that the audience is every enabled member except the sending admin, that a
+member with **Messages from admins** unchecked still has the message on their
+Notifications page (`db.activity.list(...)`), that the author never notifies
+themselves, and that an audience with no live member is still refused with 400.
+
+Run the composer regression with `PUPPETEER_MODULE` and `CHROME_PATH` set:
+
+```
+node tests/notification-messages-browser.mjs
+```
+
+It checks the `N members in-app / D devices with push` audience line, that
+**Send notification** stays enabled when Web Push is unconfigured (in-app only)
+and when the recipient has zero push devices, that the in-app copy is stored
+before any push is attempted, that **Cancel queued** retracts unread in-app
+copies, and that a disabled recipient still disables Send rather than silently
+becoming a broadcast. Push transport is mocked; no live messages are sent.
+
 ## Linked Growth Chart (2026-09-12)
 
 `npm test` includes growth-chart.test.mjs: bounded validation, SQLite persistence,

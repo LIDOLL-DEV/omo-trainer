@@ -37,6 +37,7 @@ export function createActivity(db,{canSee=()=>true,now=Date.now}={}) {
  } // Store one account notification independently of device delivery; retries never create duplicate history or pushes.
  function valid(row){return !row.withdrawn&&active(row.owner)&&(!row.actor||active(row.actor))&&canSee(row);}
  function withdraw(id){db.prepare('UPDATE activity_notifications SET withdrawn=1 WHERE id=?').run(id);db.prepare("UPDATE activity_deliveries SET state='skipped' WHERE notification_id=? AND state='queued'").run(id);}
+ function withdrawSource(source){let removed=0;for(const row of db.prepare('SELECT id FROM activity_notifications WHERE source=? AND withdrawn=0 AND read_at IS NULL').all(source)){withdraw(row.id);removed++;}return removed;} // Retract one broadcast's unread in-app copies; anything a member already read stays in their history.
  function prune(owner){trim(owner);for(const row of db.prepare('SELECT * FROM activity_notifications WHERE owner=? AND withdrawn=0').all(owner))if(!valid(row))withdraw(row.id);}
  function payload(row) {
   if(!preferences[row.kind])return {title:row.title,body:row.body};
@@ -82,5 +83,5 @@ export function createActivity(db,{canSee=()=>true,now=Date.now}={}) {
   }
  } // Quiet hours, live audience checks, expiry and claims happen before network work; ambiguous failures are not retried.
  function messagesRead(owner){db.prepare("UPDATE activity_notifications SET read_at=COALESCE(read_at,?) WHERE owner=? AND kind='message' AND message_id IN (SELECT m.id FROM friend_messages m JOIN friend_message_reads r ON r.friendship_id=m.friendship_id AND r.owner=? WHERE m.seq<=r.seq)").run(now(),owner,owner);cancel(owner);} // Reading a thread marks its stored alerts read and cancels unsent pushes.
- return {record,list,read,cancel,tick,prune,withdraw,messagesRead};
+ return {record,list,read,cancel,tick,prune,withdraw,withdrawSource,messagesRead};
 }

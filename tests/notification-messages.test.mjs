@@ -15,11 +15,16 @@ function fixture(send=async()=>{}){const db=openDatabase(':memory:',{stickerCata
 function access(db,admin,user,role,disabled=false){const row=db.admin.users(admin.id).find(row=>row.id===user.id);db.admin.updateUser(admin.id,{action:'update',id:user.id,role,disabled,version:row.version});}
 
 test('admin message permissions, explicit opt-in migration, validation and idempotent queueing',()=>{
- const {db,admin,a}=fixture();try{
+ const {db,admin,a,b}=fixture();try{
   db.notifications.save(a.id,{...preference('old'),adminMessages:undefined});
   assert.equal(db.notifications.status(a.id).preferences.adminMessages,0);
-  assert.equal(db.notifications.messages.overview(admin.id).recipients.length,0);
-  assert.throws(()=>db.notifications.messages.queue(admin.id,message('no-recipients'),now),e=>e.status===400);
+  const audience=db.notifications.messages.overview(admin.id).recipients;
+  assert.deepEqual(audience.map(row=>row.id).sort(),[a.id,b.id].sort()); // Every enabled member is a recipient except the sending admin, opted into push or not.
+  assert.equal(audience.find(row=>row.id===a.id).subscriptions,0); // Alice declined admin push, so she is counted as in-app only.
+  db.notifications.messages.queue(admin.id,message('in-app-only'),now); // No push subscriber is required any more.
+  for(const user of [a,b]){const feed=db.activity.list(user.id);assert.equal(feed.unread,1);assert.equal(feed.items[0].title,'Little Log');assert.equal(feed.items[0].body,message('x').body);}
+  assert.equal(db.activity.list(admin.id).items.length,0); // The author never notifies themselves.
+  assert.throws(()=>db.notifications.messages.queue(admin.id,message('nobody','missing-participant'),now),e=>e.status===400); // An audience with no live member is still refused.
   assert.throws(()=>db.notifications.messages.overview(a.id),e=>e.status===403);
   db.notifications.save(a.id,preference('old'));
   for(const input of [null,[],{...message('invalid-1'),title:''},{...message('invalid-2'),body:'a'.repeat(501)},{...message('invalid-3'),requestId:'x'},{...message('invalid-4'),participantId:4}])assert.throws(()=>db.notifications.messages.queue(admin.id,input,now),e=>e.status===400);
@@ -27,8 +32,8 @@ test('admin message permissions, explicit opt-in migration, validation and idemp
   const first=db.notifications.messages.queue(admin.id,message('same-request',a.id),now);
   const second=db.notifications.messages.queue(admin.id,message('same-request',a.id),now);assert.equal(first.id,second.id);assert.equal(second.repeated,true);
   assert.throws(()=>db.notifications.messages.queue(admin.id,{...message('same-request',a.id),body:'Changed'},now),e=>e.status===409);
-  assert.equal(db.notifications.messages.overview(admin.id).messages.length,1);
-  assert.equal(db.admin.auditList(admin.id).filter(row=>row.action==='queue-notification').length,1);
+  assert.equal(db.notifications.messages.overview(admin.id).messages.length,2);
+  assert.equal(db.admin.auditList(admin.id).filter(row=>row.action==='queue-notification').length,2);
  }finally{db.close();}
 });
 

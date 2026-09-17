@@ -59,15 +59,15 @@
         <button id="all-dates" class="button secondary">All dates</button>
       </section>
       <section data-panel="notifications" aria-labelledby="push-title" hidden>
-        <section id="push-composer" class="card"><h2 id="push-title">Send a notification</h2><p class="section-copy">Send a message to members who have enabled Messages from admins. This audience is separate from the analysis filters. Delivery starts within a minute, respects each member's quiet hours, and expires after 24 hours.</p>
-          <form id="push-form"><label for="push-recipient">Send to</label><select id="push-recipient"><option value="">Everyone subscribed</option></select><p id="push-audience" class="field-help"></p>
+        <section id="push-composer" class="card"><h2 id="push-title">Send a notification</h2><p class="section-copy">Send a message to members. Every enabled member receives it in the app on their Notifications page straight away, with no opt-in needed. Members who enabled Messages from admins <em>also</em> get a push notification on their devices: that delivery starts within a minute, respects each member's quiet hours, and expires after 24 hours. This audience is separate from the analysis filters.</p>
+          <form id="push-form"><label for="push-recipient">Send to</label><select id="push-recipient"><option value="">Everyone</option></select><p id="push-audience" class="field-help"></p>
             <label for="push-heading">Notification title</label><input id="push-heading" maxlength="80" required value="Little Log"><label for="push-body">Message</label><textarea id="push-body" rows="4" maxlength="500" required></textarea>
             <p class="field-help">Notification preview</p><div class="push-preview"><strong id="push-preview-title">Little Log</strong><p id="push-preview-body">Your message appears here.</p></div>
             <p id="push-readiness" class="field-help" role="status" aria-live="polite"></p>
             <div class="admin-buttons"><button aria-describedby="push-readiness" id="push-send" class="button primary" type="submit" disabled>Send notification</button><button id="push-reload" class="button secondary" type="button">Refresh delivery status</button></div>
           </form><p id="push-status" class="field-help" role="status"></p>
         </section>
-        <section class="card"><h2>Recent notifications</h2><p class="field-help">Counts are per device. Accepted means the push service accepted the message, not that the member saw it. Failed / uncertain messages are not automatically retried. Cancel only stops queued deliveries.</p><div id="push-history" class="table-scroll"></div></section>
+        <section class="card"><h2>Recent notifications</h2><p class="field-help">Audience shows how many members hold the in-app copy and how many devices were queued for push; the remaining counts are per device. Accepted means the push service accepted the message, not that the member saw it. Failed / uncertain messages are not automatically retried. Cancel stops queued device deliveries and removes unread in-app copies; anything already read or already accepted by a push service cannot be recalled.</p><div id="push-history" class="table-scroll"></div></section>
       </section>
       <section data-panel="reminders" aria-labelledby="reminder-editor-title" hidden>
         <section class="card"><h2 id="reminder-editor-title">Admin reminder</h2><p class="section-copy">Publish a reminder in the scrolling header on Little Log's home page. Published text is visible to everyone, including signed-out visitors. Changes reach open pages within 30 seconds.</p>
