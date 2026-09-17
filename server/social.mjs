@@ -267,6 +267,7 @@ export function createSocial(db,friends,{now=Date.now,activity,stickerInfo=id=>(
  function removeComment(c){db.prepare("UPDATE social_comments SET body='',deleted=COALESCE(deleted,?) WHERE id=?").run(now(),c.id);db.prepare('DELETE FROM social_comment_likes WHERE comment_id=?').run(c.id);withdrawPost(c.post_id,c.id);} // Replies stay; the removed comment becomes a placeholder in its thread.
  function deleteComment(owner,id) {requireUser(owner);return transaction(()=>{const c=db.prepare('SELECT * FROM social_comments WHERE id=?').get(key(id));if(!c)fail(404,'Comment not found.');postAccess(owner,c.post_id);if(c.owner!==owner)fail(403,'Only the comment author can remove this comment.');removeComment(c);return {removed:true};});} // Post owners report unwanted comments instead of deleting them.
  function activityVisible(row) {
+  if(row.kind==='friend-playing')return friends.accepted(row.owner,row.actor); // Unfriending revokes both stored game alerts and queued pushes.
   if(row.kind==='message')return Boolean(db.prepare("SELECT 1 FROM friend_messages m JOIN friendships f ON f.id=m.friendship_id WHERE m.id=? AND m.sender=? AND m.sender<>? AND (f.a=? OR f.b=?) AND f.state='accepted' AND m.deleted IS NULL").get(row.message_id,row.actor,row.owner,row.owner,row.owner));
   if(!['like','comment','reply','comment-like','friend-post'].includes(row.kind))return true;
   try{postAccess(row.owner,row.post_id);postAccess(row.actor,row.post_id);}catch{return false;}

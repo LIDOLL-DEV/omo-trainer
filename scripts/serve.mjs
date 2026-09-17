@@ -40,6 +40,7 @@ const files = new Map([
   ...stickerAssets.map(item => [item.url, item.mime]),
   ['coins/browser.js','text/javascript; charset=utf-8'],
   ['coins/index.html','text/html; charset=utf-8'], ['coins/app.js','text/javascript; charset=utf-8'], ['coins/style.css','text/css; charset=utf-8'],
+  ['companion/index.html','text/html; charset=utf-8'], ['companion/app.js','text/javascript; charset=utf-8'], ['companion/style.css','text/css; charset=utf-8'],
   ['lib/prediction.js', 'text/javascript; charset=utf-8'], ['lib/prediction-view.js', 'text/javascript; charset=utf-8'],
   ['lib/reward-celebration.js', 'text/javascript; charset=utf-8'],
   ['lib/notifications.js', 'text/javascript; charset=utf-8'],
@@ -77,9 +78,10 @@ export const server = http.createServer(requestBoundary(async (request, response
   }
   if (!pathname.startsWith(base)) { response.writeHead(404); return response.end('Not found'); }
   if (pathname === `${base}coins`) {response.writeHead(308,{Location:`${base}coins/`});return response.end();}
+  if (pathname === `${base}companion`) {response.writeHead(308,{Location:`${base}companion/`});return response.end();}
   if (pathname === `${base}admin`) { response.writeHead(308, { Location: `${base}admin/` }); return response.end(); }
   if ([`${base}potty_chart`, `${base}potty_chart/`, `${base}potty_chart/index.html`].includes(pathname)) { response.writeHead(308, { Location: `${base}#potty-chart` }); return response.end(); } // Old chart bookmarks now open the integrated view.
-  const filename = pathname.slice(base.length) === 'coins/' ? 'coins/index.html' : pathname.slice(base.length) === 'admin/' ? 'admin/index.html' : pathname.slice(base.length) === 'potty_chart/' ? 'potty_chart/index.html' : pathname.slice(base.length) || 'index.html';
+  const filename = pathname.slice(base.length) === 'coins/' ? 'coins/index.html' : pathname.slice(base.length) === 'companion/' ? 'companion/index.html' : pathname.slice(base.length) === 'admin/' ? 'admin/index.html' : pathname.slice(base.length) === 'potty_chart/' ? 'potty_chart/index.html' : pathname.slice(base.length) || 'index.html';
   if (!files.has(filename)) { response.writeHead(404); return response.end('Not found'); }
   try {
     const assetPath = stickerPaths.get(filename) ?? filename;

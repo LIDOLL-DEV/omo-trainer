@@ -138,6 +138,8 @@ The first change after a date rollover starts the next diaper at #1, while the c
 
 [Games guide](GAMES_GUIDE.md) covers the four MommyBot web games, including Prism Drop (`balldrop`). `lib/games.js` handles connectivity, `server/games.mjs` provides fixed redirects using `LIDOLLBOT_PUBLIC_ORIGIN`, and `#games` shares existing navigation and themes. Keep game databases, wallet grants and payment logic in MommyBot; never forward PWA credentials or cache game redirects/API responses.
 
+LidollQuest-Companion is a tracker page (`companion/`), deliberately **not** a `server/games.mjs` redirect: the browser wallet gateway is same-origin only (cross-site and foreign-`Origin` requests are refused, and its session cookie is `Path`-scoped to `api/lidollcoin/browser/`), while the bearer path is locked to `client_id=lidollquest`. A bot-hosted page would have required relaxing both, so keep the companion on this origin. `server/quest-proxy.mjs` forwards only an allowlist of query parameters, so a new companion parameter must be added there before the LiDollQuest service can see it (`view` and `bank_page` were added for this feature). Never widen the proxy's route allowlist to reach new arena endpoints without the matching scope check in `server/quest-account-api.mjs`. Consent return destinations stay a fixed table in `server/coin-browser-api.mjs` with a `standalone` fallback; never derive one from a request parameter. The tracker stores no characters, banks or item prices.
+
 
 ## Additional event choices
 

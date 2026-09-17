@@ -1,6 +1,7 @@
 import {createActivity} from './activity.mjs';
 import {createSocial} from './social.mjs';
 import {createFriends} from './friends.mjs';
+import {createGamePresence} from './game-presence.mjs';
 import {createQuestSocial} from './quest-social.mjs';
 import {createNotifications} from './notifications.mjs';
 import {createAnalysisStore} from './ai-analysis.mjs';
@@ -255,9 +256,10 @@ export function openDatabase(filename = databasePath(), options = {}) { // Opens
   const stickerTypes = new Map(catalog.map(type => [type.id, {id: type.id, name: type.name, url: type.url}])); // Public sticker details shown on comments and messages.
   for (const {alias, canonical} of options.stickerDuplicates ?? STICKER_DUPLICATES) if (stickerTypes.has(canonical)) stickerTypes.set(alias, stickerTypes.get(canonical)); // Merged duplicate IDs display the surviving design.
   const stickerInfo = id => stickerTypes.get(id) ?? {id, name: 'Sticker', url: null}; // Retired assets still show a labelled placeholder.
-  const friends=createFriends(db,recordFromRow,{avatarInfo:id=>social.avatarInfo(id),onRemove:(a,b)=>{notifications.community.restrictPair(a,b);activity.prune(a);activity.prune(b);}});
-  const questSocial=createQuestSocial(db,friends);
+  const friends=createFriends(db,recordFromRow,{avatarInfo:id=>social.avatarInfo(id),presenceInfo:(owner,target)=>gamePresence.read(owner,target),onRemove:(a,b)=>{notifications.community.restrictPair(a,b);activity.prune(a);activity.prune(b);}});
+  const questSocial=createQuestSocial(db,friends,{presence:(owner,input)=>gamePresence.act(owner,input)});
   const activity=createActivity(db,{now:options.now,canSee:row=>social.activityVisible(row)});
+  const gamePresence=createGamePresence(db,friends,{now:options.now,activity}); // The tracker remains the authority for the friend audience and notification preferences.
   const socialCore=createSocial(db,friends,{now:options.now,activity,stickerInfo});
   const stickerGifts=createStickerGifts(socialCore,economy); // Comments/messages with a sticker move it to the recipient's inventory first.
   const social={...socialCore,comment:stickerGifts.comment,sendMessage:stickerGifts.sendMessage,stickers:stickerGifts.owned,reconcileStickers:stickerGifts.reconcile};
@@ -266,7 +268,7 @@ export function openDatabase(filename = databasePath(), options = {}) { // Opens
   const statistics=createStatistics(db,admin,options.statistics); // Scoped device reads reuse the same saved-record aggregation as admin reports.
   return {
     identity, identityStatus, activity, social, friends, statistics, aiAnalysis, notifications, economy, admin, ensureParticipant, createSession:sessions.create, session:sessions.read, sessionNow:sessions.now, saveLogin, takeLogin, records, sync, exportRows, growthChart, saveGrowthChart, migrateIssuer,
-    questSocial,deleteSession:sessions.remove,
+    questSocial,gamePresence,deleteSession:sessions.remove,
     exportCharts: () => db.prepare('SELECT participant_id, payload_json, version, updated_at FROM growth_charts ORDER BY participant_id').all().map(row => ({ participantId: row.participant_id, chart: JSON.parse(row.payload_json), version: row.version, updatedAt: row.updated_at })), // Private administrator export, separate from observation CSV.
     list: () => db.prepare('SELECT id, label, created_at FROM participants ORDER BY created_at').all(),
     backup: destination => backup(db, destination), // Uses SQLite's online backup API so WAL data is included consistently.

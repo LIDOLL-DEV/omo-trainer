@@ -1,0 +1,69 @@
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { mkdir, mkdtemp } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+process.env.PORT = '0'; // Ephemeral port so the suite never disturbs a local preview server.
+process.env.HOST = '127.0.0.1';
+process.env.BASE_PATH = '/tracker/';
+await mkdir('artifacts', { recursive: true });
+process.env.DATA_DIR = await mkdtemp(resolve('artifacts/companion-'));
+const { server } = await import('../scripts/serve.mjs');
+if (!server.listening) await once(server, 'listening');
+const origin = `http://127.0.0.1:${server.address().port}`;
+after(() => new Promise(done => server.close(done)));
+const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+
+test('the companion is served from the tracker origin with its own assets', async () => {
+  const bare = await fetch(`${origin}/tracker/companion`, { redirect: 'manual' });
+  assert.equal(bare.status, 308);
+  assert.equal(bare.headers.get('location'), '/tracker/companion/');
+  const page = await fetch(`${origin}/tracker/companion/`);
+  assert.equal(page.status, 200);
+  assert.match(page.headers.get('content-type'), /text\/html/);
+  const html = await page.text();
+  assert.match(html, /LidollQuest-Companion/);
+  assert.doesNotMatch(html, /<iframe/i);
+  for (const asset of ['companion/app.js', 'companion/style.css']) {
+    const response = await fetch(`${origin}/tracker/${asset}`);
+    assert.equal(response.status, 200, `${asset} must be served`);
+  }
+});
+
+test('the companion calls the gateway same-origin and never carries a bot origin or a token', () => {
+  const app = read('companion/app.js');
+  assert.match(app, /'\.\.\/api\/lidollcoin\/browser\/'/); // Relative so the wallet cookie's Path scope matches and no cross-origin request is ever made.
+  assert.match(app, /credentials:'same-origin'/);
+  assert.match(app, /view=companion/);
+  assert.match(app, /action:'bank_sell'/);
+  assert.doesNotMatch(app, /bot\.lidoll\.dev|Bearer|LIDOLLBOT/); // The page holds no bearer token and points at no bot origin.
+  assert.doesNotMatch(app, /zones\/inspect/); // The sheet rides along in the companion view: zones/inspect needs an arena presence a companion never has.
+  assert.doesNotMatch(read('server/games.mjs'), /lidollquest-companion/); // The companion is not a bot redirect.
+  assert.match(read('index.html'), /href="\.\/companion\/"/);
+});
+
+test('the consent flow keeps a fixed companion return destination', () => {
+  const api = read('server/coin-browser-api.mjs');
+  assert.match(api, /companion:\{login:'game-wallet-companion',form:'companion',back:base\+'companion\/'\}/);
+  assert.match(api, /views\[value\]\?\?views\.standalone/); // An unknown view falls back to standalone rather than to an attacker-supplied URL.
+  const login = read('server/login.mjs');
+  assert.match(login, /'game-wallet-companion'/);
+  assert.match(login, /game-wallet-companion' \? `\$\{base\}api\/lidollcoin\/browser\/connect\?view=companion`/);
+});
+
+test('an unlinked visitor is offered the companion consent view rather than an error', async () => {
+  const response = await fetch(`${origin}/tracker/api/lidollcoin/browser/session`, { redirect: 'manual' });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { linked: false }); // The page turns this into a Connect button, not a failure.
+  const html = read('companion/index.html');
+  assert.match(html, /connect\?view=companion/);
+});
+
+test('the gateway still refuses a cross-origin companion request', async () => {
+  for (const headers of [{ Origin: 'https://bot.example' }, { 'Sec-Fetch-Site': 'cross-site' }]) {
+    const response = await fetch(`${origin}/tracker/api/lidollcoin/browser/zones?view=companion`, { headers, redirect: 'manual' });
+    assert.equal(response.status, 403, `cross-origin companion reads must stay refused (${JSON.stringify(headers)})`);
+  }
+});

@@ -489,3 +489,13 @@ accounts are unavailable. Use Older posts / Newest posts to navigate history.
 ## Admission and retention
 
 Uploads reserve capacity before body buffering or image decoding: four active requests per server process, two per account, and 20 attempts per account per minute. Retry after a 429 response. Manual and automatic record posts share a ten-post-per-minute account budget. Excess automatic posts are suppressed; all valid records still save, and edits/retries do not publish suppressed posts later. Activity retains the newest 1,000 notifications per account. Push delivery reads bounded pages and attempts at most 100 deliveries per tick. See [SECURITY_ROLLOUT.md](SECURITY_ROLLOUT.md).
+
+## LiDollQuest friend activity
+
+Accepted friends can see Playing LiDollQuest in Friends and receive a stored activity entry when a linked game starts. The game also shows a Friends badge and a brief notice. Activity contains only the member display name and game name. Unfriending removes visibility; pending requests and strangers receive nothing.
+
+Settings > Friends playing LiDollQuest is an optional push preference (`friendGames`, stored as `friend_games`), off by default. It uses existing device permission, subscriptions and quiet hours. Expired play sessions and ended friendships suppress queued alerts. The activity feed remains available with push disabled.
+
+The existing scoped Quest social POST accepts `{action:"presence",session:"unique-window-id",playing:true}`; the authenticated grant determines the owner. Session IDs contain 8-80 letters, digits, underscores or hyphens. Heartbeats are expected every 30 seconds and expire after 90 seconds. Multiple windows coalesce; repeated starts have a five-minute notification cooldown. Send `playing:false` on leaving play. GET social and Friends rows expose `playing` and `gameStarted` only to accepted friends.
+
+Additive SQLite tables preserve existing accounts, friendships, subscriptions and records. Deploy the tracker service/UI before the rebuilt game. `tests/game-presence.test.mjs` covers ownership, duplicate heartbeats, expiry, multiwindow behavior, push opt-in, quiet hours and unfriend suppression. The game repository also contains real two-player and tracker UI browser fixtures under `python/tests/fixtures/friend_activity*`.

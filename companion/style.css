@@ -1,0 +1,13 @@
+/* Companion-only layout. Colours and cards come from styles.css/themes.css so both themes stay correct. */
+.companion-page main{max-width:60rem;margin:0 auto;padding:1.5rem 1rem 3rem;}
+.companion-back{display:inline-block;margin-bottom:1rem;}
+.companion-name{font-size:1.25rem;font-weight:700;margin:0 0 .5rem;}
+.companion-facts{display:grid;grid-template-columns:auto 1fr;gap:.25rem 1rem;margin:0 0 1rem;}
+.companion-facts dt{font-weight:600;opacity:.8;}
+.companion-facts dd{margin:0;}
+.companion-gear{display:grid;grid-template-columns:repeat(auto-fill,minmax(13rem,1fr));gap:.5rem;}
+.companion-slot{display:flex;flex-direction:column;gap:.15rem;padding:.5rem .65rem;border-radius:.6rem;background:rgb(0 0 0 / 4%);}
+.companion-slot-name{text-transform:capitalize;font-size:.8rem;opacity:.75;}
+.companion-bank-heading{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:.5rem;}
+.companion-bank-heading h2{margin:0;}
+@media (prefers-color-scheme:dark){.companion-slot{background:rgb(255 255 255 / 6%);}}

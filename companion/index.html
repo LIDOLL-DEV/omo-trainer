@@ -1,0 +1,31 @@
+<!doctype html><html lang="en" data-theme="little-tracker"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fff5fa"><title>LidollQuest-Companion · Little Log</title><script src="../theme-init.js"></script><link rel="stylesheet" href="../styles.css"><link rel="stylesheet" href="../themes.css"><link rel="stylesheet" href="../coins/style.css"><link rel="stylesheet" href="./style.css"></head><body class="companion-page"><main>
+<a class="companion-back" href="../#games">Back to Games</a>
+<h1>LidollQuest-Companion</h1>
+<p class="section-copy">Check in on your adventurer between sessions: what she is wearing, and everything waiting in her bank. Sell stored loot without walking back to a shop.</p>
+<p id="status" role="status">Checking your connection…</p>
+
+<section id="link" class="card" hidden>
+  <h2>Connect LiDollQuest</h2>
+  <p>The companion reads your character through your LiDollQuest wallet connection. Approve it once and this page can show your character and bank.</p>
+  <a id="link-start" class="button primary" href="../api/lidollcoin/browser/connect?view=companion">Connect LiDollQuest</a>
+</section>
+
+<section id="content" hidden>
+  <section class="card">
+    <h2>Character</h2>
+    <p><label for="character">Your characters</label><select id="character"></select></p>
+    <p id="wallet" class="field-help"></p>
+    <div id="sheet"></div>
+    <h3>Equipped</h3>
+    <div id="equipment" class="companion-gear"></div>
+  </section>
+
+  <section class="card">
+    <div class="companion-bank-heading"><h2>Bank</h2><button id="reload" class="button secondary" type="button">Refresh</button></div>
+    <p id="bank-summary" class="field-help"></p>
+    <p id="bank-status" class="field-help" role="status"></p>
+    <div id="bank" class="table-scroll"></div>
+    <div class="notification-actions"><button id="previous" class="button secondary" type="button" hidden>Previous page</button><button id="next" class="button secondary" type="button" hidden>Next page</button></div>
+  </section>
+</section>
+</main><script type="module" src="./app.js"></script></body></html>

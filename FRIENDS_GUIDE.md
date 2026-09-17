@@ -81,3 +81,13 @@ Browser fixtures use disposable accounts; push transport is mocked.
 Member pictures appear beside names in friend search, requests and shared records.
 Upload or remove your own picture in **Settings > Profile picture**. Pictures
 are visible to signed-in members; friendship is not required to see one.
+
+## LiDollQuest friend activity
+
+Accepted friends can see Playing LiDollQuest in Friends and receive a stored activity entry when a linked game starts. The game also shows a Friends badge and a brief notice. Activity contains only the member display name and game name. Unfriending removes visibility; pending requests and strangers receive nothing.
+
+Settings > Friends playing LiDollQuest is an optional push preference (`friendGames`, stored as `friend_games`), off by default. It uses existing device permission, subscriptions and quiet hours. Expired play sessions and ended friendships suppress queued alerts. The activity feed remains available with push disabled.
+
+The existing scoped Quest social POST accepts `{action:"presence",session:"unique-window-id",playing:true}`; the authenticated grant determines the owner. Session IDs contain 8-80 letters, digits, underscores or hyphens. Heartbeats are expected every 30 seconds and expire after 90 seconds. Multiple windows coalesce; repeated starts have a five-minute notification cooldown. Send `playing:false` on leaving play. GET social and Friends rows expose `playing` and `gameStarted` only to accepted friends.
+
+Additive SQLite tables preserve existing accounts, friendships, subscriptions and records. Deploy the tracker service/UI before the rebuilt game. `tests/game-presence.test.mjs` covers ownership, duplicate heartbeats, expiry, multiwindow behavior, push opt-in, quiet hours and unfriend suppression. The game repository also contains real two-player and tracker UI browser fixtures under `python/tests/fixtures/friend_activity*`.

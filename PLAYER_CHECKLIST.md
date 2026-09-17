@@ -91,6 +91,15 @@ Open Settings and choose **Little Log** for soft pastels or **Caregiver Tracker*
 - Administrators: **Admin console > Reminders > Margin note** edits the home-page tips separately from the scrolling header. Enter up to 2,000 characters, keep line breaks if wanted, and save. Use **Show this margin note** to publish or hide it.
 
 - **Settings > Manage connected games** lets you approve a LiDollQuest connection code or disconnect an app. A linked game earns/spends from the same LiDollCoin wallet; saved local gold is not deposited.
+- **Games > LidollQuest-Companion** opens inside Little Log and shows your
+  LiDollQuest character and her bank without starting the game: level, class,
+  what she is wearing, and every item in storage with its sale price. The first
+  visit asks you to connect LiDollQuest if you have not already; if you have,
+  it loads straight away. Sell a stored item
+  straight from the list for LiDollCoins; you do not have to walk back to a shop,
+  and you can do it while she is parked mid-dungeon. Selling is refused during a
+  fight, and once you reach your daily coin allowance the item stays in your bank
+  until the UTC reset.
 
 
 ## Additional event choices

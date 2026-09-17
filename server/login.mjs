@@ -58,7 +58,7 @@ export function createLogin(database, base, options={}) { // Acts as an OIDC rel
           const attempt = randomBytes(32).toString('base64url');
           const verifier = oidc.randomPKCECodeVerifier(), state = oidc.randomState(), nonce = oidc.randomNonce();
           const destination = new URL(request.url, origin).searchParams.get('returnTo');
-          const returnTo = ['growth-chart', 'admin', 'stickers', 'coins', 'game-wallet', 'game-wallet-embedded', 'social', 'post', 'feed', 'friends', 'messages', 'activity', 'profile'].includes(destination) ? destination : 'settings';
+          const returnTo = ['growth-chart', 'admin', 'stickers', 'coins', 'game-wallet', 'game-wallet-embedded', 'game-wallet-companion', 'social', 'post', 'feed', 'friends', 'messages', 'activity', 'profile'].includes(destination) ? destination : 'settings';
           database.saveLogin(attempt, { verifier, state, nonce, returnTo }); // Keep an allowlisted destination server-side, including the chart view inside Little Log.
           const location = oidc.buildAuthorizationUrl(config, { redirect_uri: `${origin}${base}auth/callback`, scope: 'openid profile', code_challenge: await oidc.calculatePKCECodeChallenge(verifier), code_challenge_method: 'S256', state, nonce,
             ...(route === 'register' ? { screen_hint: 'signup', prompt: 'login' } : new URL(request.url, origin).searchParams.get('reauth') === '1' ? { prompt: 'login' } : {}), // Registration keeps the same PKCE, state, nonce, and exact callback protections as sign-in.
@@ -77,7 +77,7 @@ export function createLogin(database, base, options={}) { // Acts as an OIDC rel
           const security=await checkIdentity(account.id,true);
           if(profile.security_version!==security.version)throw Error('Identity changed during sign-in. Start again.');
           database.deleteSession(cookie(request, sessionName));
-          return redirect(response, ['social','post','feed','friends','messages','activity','profile'].includes(attempt.returnTo) ? `${base}#${attempt.returnTo}` : attempt.returnTo === 'game-wallet-embedded' ? `${base}api/lidollcoin/browser/connect?view=embedded` : attempt.returnTo === 'game-wallet' ? `${base}api/lidollcoin/browser/connect` : attempt.returnTo === 'coins' ? `${base}coins/` : attempt.returnTo === 'growth-chart' ? `${base}#potty-chart` : attempt.returnTo === 'stickers' ? `${base}#stickers` : attempt.returnTo === 'admin' ? `${base}admin/` : `${base}#settings`, [setCookie(sessionName, database.createSession(account.id), SESSION_IDLE_SECONDS), setCookie(loginName, '', 0)]);
+          return redirect(response, ['social','post','feed','friends','messages','activity','profile'].includes(attempt.returnTo) ? `${base}#${attempt.returnTo}` : attempt.returnTo === 'game-wallet-companion' ? `${base}api/lidollcoin/browser/connect?view=companion` : attempt.returnTo === 'game-wallet-embedded' ? `${base}api/lidollcoin/browser/connect?view=embedded` : attempt.returnTo === 'game-wallet' ? `${base}api/lidollcoin/browser/connect` : attempt.returnTo === 'coins' ? `${base}coins/` : attempt.returnTo === 'growth-chart' ? `${base}#potty-chart` : attempt.returnTo === 'stickers' ? `${base}#stickers` : attempt.returnTo === 'admin' ? `${base}admin/` : `${base}#settings`, [setCookie(sessionName, database.createSession(account.id), SESSION_IDLE_SECONDS), setCookie(loginName, '', 0)]);
         }
         response.writeHead(404); response.end();
       } catch (error) {

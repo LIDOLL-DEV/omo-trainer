@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 const account=id=>createHash('sha256').update('lidollquest:'+id).digest('hex');
 const fail=(status,message)=>{throw Object.assign(Error(message),{status});};
-export function createQuestSocial(db,friends){
+export function createQuestSocial(db,friends,{presence=()=>({})}={}){
  db.exec('CREATE TABLE IF NOT EXISTS quest_social_accounts(account_id TEXT PRIMARY KEY,participant_id TEXT UNIQUE NOT NULL REFERENCES participants(id))');
  function register(id){db.prepare('INSERT OR IGNORE INTO quest_social_accounts VALUES (?,?)').run(account(id),id);}
  for(const row of db.prepare('SELECT id FROM participants').all())register(row.id);
@@ -14,6 +14,6 @@ export function createQuestSocial(db,friends){
   const links=friends.list(owner),byMember=new Map(links.map(row=>[row.participantId,row]));
   return {self,friends:(query.q?friends.search(owner,query.q).map(row=>({...row,...byMember.get(row.participantId)})):links).map(view)};
  }
- function act(owner,input){member(owner);return friends.act(owner,input?.action==='request'?{action:'request',participantId:resolve(input.account_id)}:{action:input?.action,id:input?.id});}
+ function act(owner,input){member(owner);if(input?.action==='presence')return presence(owner,input);return friends.act(owner,input?.action==='request'?{action:'request',participantId:resolve(input.account_id)}:{action:input?.action,id:input?.id});}
  return {register,read,act};
 } // One relationship store serves both apps; Quest sees only its existing opaque account IDs.

@@ -1,4 +1,4 @@
-﻿import webpush from 'web-push';
+import webpush from 'web-push';
 import {createLittlepottchiBridge} from './littlepottchi-bridge.mjs';
 import {createCommunitySupport} from './community-support.mjs';
 import {createNotificationMessages} from './notification-messages.mjs';
@@ -29,6 +29,7 @@ export function createNotifications(db,records,options={}) { // Subscriptions an
  CREATE INDEX IF NOT EXISTS push_owner ON push_subscriptions(owner);
  CREATE TABLE IF NOT EXISTS notification_blocks(owner TEXT NOT NULL REFERENCES participants(id),block TEXT NOT NULL,selected INTEGER NOT NULL,sent INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL,PRIMARY KEY(owner,block));`);
  if(!db.prepare('PRAGMA table_info(notification_preferences)').all().some(column=>column.name==='admin_messages'))db.exec('ALTER TABLE notification_preferences ADD COLUMN admin_messages INTEGER NOT NULL DEFAULT 0'); // Existing reminder-only subscriptions do not silently opt into announcements.
+ if(!db.prepare('PRAGMA table_info(notification_preferences)').all().some(column=>column.name==='friend_games'))db.exec('ALTER TABLE notification_preferences ADD COLUMN friend_games INTEGER NOT NULL DEFAULT 0'); // Friend game pushes are optional; stored activity does not require push enrollment.
  if(!db.prepare('PRAGMA table_info(notification_preferences)').all().some(column=>column.name==='community_support'))db.exec('ALTER TABLE notification_preferences ADD COLUMN community_support INTEGER NOT NULL DEFAULT 0');
  if(!db.prepare('PRAGMA table_info(notification_preferences)').all().some(column=>column.name==='community_anonymous'))db.exec('ALTER TABLE notification_preferences ADD COLUMN community_anonymous INTEGER NOT NULL DEFAULT 0'); // Display names are the default; anonymous sharing is an explicit account preference.
  if(!db.prepare('PRAGMA table_info(notification_preferences)').all().some(c=>c.name==='community_friends_only'))db.exec('ALTER TABLE notification_preferences ADD COLUMN community_friends_only INTEGER NOT NULL DEFAULT 0'); // Friends-only is optional and never enables sharing by itself.
@@ -50,7 +51,7 @@ export function createNotifications(db,records,options={}) { // Subscriptions an
  const community=createCommunitySupport(db,{configured,send,localBlock,areFriends:options.areFriends,activity:options.activity});
  const random=options.random??(()=>randomInt(100));let running=false;
  function status(owner) {
-  const pref=db.prepare('SELECT time_zone AS timeZone,quiet_start AS quietStart,quiet_end AS quietEnd,admin_messages AS adminMessages,community_support AS communitySupport,community_anonymous AS communityAnonymous,community_friends_only AS communityFriendsOnly,social_likes AS socialLikes,social_comments AS socialComments,friend_posts AS friendPosts,friend_wettings AS friendWettings,friend_changes AS friendChanges,friend_liquids AS friendLiquids,friend_rolls AS friendRolls,direct_messages AS directMessages FROM notification_preferences WHERE owner=?').get(owner);
+  const pref=db.prepare('SELECT time_zone AS timeZone,quiet_start AS quietStart,quiet_end AS quietEnd,admin_messages AS adminMessages,community_support AS communitySupport,community_anonymous AS communityAnonymous,community_friends_only AS communityFriendsOnly,social_likes AS socialLikes,social_comments AS socialComments,friend_posts AS friendPosts,friend_wettings AS friendWettings,friend_changes AS friendChanges,friend_liquids AS friendLiquids,friend_rolls AS friendRolls,direct_messages AS directMessages,friend_games AS friendGames FROM notification_preferences WHERE owner=?').get(owner);
   return {configured,publicKey:configured?publicKey:'',preferences:pref??null,subscriptions:db.prepare('SELECT COUNT(*) AS n FROM push_subscriptions WHERE owner=?').get(owner).n};
  }
  function save(owner,input) { // Authenticated opt-in registers only this user's endpoint and local-time preferences.
@@ -69,11 +70,13 @@ export function createNotifications(db,records,options={}) { // Subscriptions an
   if(typeof communityFriendsOnly!=='boolean')fail('Choose whether community support is friends-only.');
   const socialValues=[['socialLikes','social_likes'],['socialComments','social_comments'],['friendPosts','friend_posts'],['friendWettings','friend_wettings'],['friendChanges','friend_changes'],['friendLiquids','friend_liquids'],['friendRolls','friend_rolls'],['directMessages','direct_messages']].map(([field,column])=>{const value=input[field]===undefined?(savedPreferences?Boolean(savedPreferences[column]):true):input[field];if(typeof value!=='boolean')fail('Choose valid social notification preferences.');return Number(value);});
   const previous=db.prepare('SELECT owner FROM push_subscriptions WHERE endpoint=?').get(sub.endpoint);
+  const friendGames=input.friendGames??Boolean(db.prepare('SELECT friend_games FROM notification_preferences WHERE owner=?').get(owner)?.friend_games);
+  if(typeof friendGames!=='boolean')fail('Choose whether to receive friend game notifications.');
   if(previous&&previous.owner!==owner)throw Object.assign(Error('This browser is subscribed to another account. Turn off its notifications before switching accounts.'),{status:409});
   db.exec('BEGIN IMMEDIATE');try {
    if(!previous&&db.prepare('SELECT COUNT(*) AS n FROM push_subscriptions WHERE owner=?').get(owner).n>=10)fail('At most 10 devices can receive notifications.');
    db.prepare('INSERT INTO notification_preferences(owner,time_zone,quiet_start,quiet_end,admin_messages,community_support,community_anonymous,community_friends_only) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(owner) DO UPDATE SET time_zone=excluded.time_zone,quiet_start=excluded.quiet_start,quiet_end=excluded.quiet_end,admin_messages=excluded.admin_messages,community_support=excluded.community_support,community_anonymous=excluded.community_anonymous,community_friends_only=excluded.community_friends_only').run(owner,timeZone,quietStart,quietEnd,Number(adminMessages),Number(communitySupport),Number(communityAnonymous),Number(communityFriendsOnly));
-   db.prepare('UPDATE notification_preferences SET social_likes=?,social_comments=?,friend_posts=?,friend_wettings=?,friend_changes=?,friend_liquids=?,friend_rolls=?,direct_messages=? WHERE owner=?').run(...socialValues,owner);options.activity?.cancel(owner);
+   db.prepare('UPDATE notification_preferences SET social_likes=?,social_comments=?,friend_posts=?,friend_wettings=?,friend_changes=?,friend_liquids=?,friend_rolls=?,direct_messages=?,friend_games=? WHERE owner=?').run(...socialValues,Number(friendGames),owner);options.activity?.cancel(owner);
    if(communityFriendsOnly)community.restrict(owner);
    if(communityAnonymous)community.anonymize(owner);
    if(!communitySupport)community.cancel(owner);

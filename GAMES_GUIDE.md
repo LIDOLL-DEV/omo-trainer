@@ -8,11 +8,38 @@ Choose **Games** from the menu. Each card opens a game in a separate tab:
   Exact guesses return 2x the stake, one pocket away returns 1.5x rounded up,
   two away returns the stake, and larger misses return zero. Coin pegs add bonuses
   even on misses. Returns include the stake; replaying a saved drop is free.
+- **LidollQuest-Companion:** view your LiDollQuest character (level, class and
+  equipped items) and her bank between adventures, and sell stored loot for
+  LiDollCoins without walking back to an in-game shop. Free to open; a sale pays
+  the item's own server-set price against your account's daily coin allowance.
 
 Press **Sign in with LiD0llID** on the game page. Anyone with a LiD0llID account
 can play; Discord membership is optional. Register if needed and approve wallet
 access for game purchases and rewards. An existing LiD0llID browser login can
 be reused. Existing Discord-linked players keep their saved collections.
+
+LidollQuest-Companion is the one card that is **not** a MommyBot redirect. It is
+a tracker page at `{base}companion/`, alongside `coins/`, because the browser
+wallet gateway is same-origin only: `server/coin-browser-api.mjs` refuses any
+cross-site request or foreign `Origin`, and its `__Secure-lidollquest_wallet`
+cookie is `Path`-scoped to `api/lidollcoin/browser/` on the tracker origin. A
+bot-origin page could neither send that cookie nor use the bearer path, which is
+locked to `client_id=lidollquest`. Hosting the page here needs no change to
+either check.
+
+The page calls `api/lidollcoin/browser/session` to see whether a wallet
+connection exists, `api/lidollcoin/browser/zones?view=companion&bank_page=N` for
+the character list, wallet and bank, `api/lidollcoin/browser/zones/inspect` for
+the character sheet, and `api/lidollcoin/browser/zones/action` with `bank_sell`
+to sell a stored item. The tracker only proxies those calls; characters, banks,
+prices and the daily coin allowance all live in the LiDollQuest service.
+
+An unlinked visitor gets a **Connect LiDollQuest** button pointing at
+`api/lidollcoin/browser/connect?view=companion`. That is a third fixed consent
+destination beside `standalone` and `embedded`; an unknown `view` still falls
+back to `standalone`, so no caller can supply a return URL. Signing in first
+routes through the `game-wallet-companion` entry in the `server/login.mjs`
+`returnTo` allowlist.
 
 Touhou Trader is no longer listed in the Games menu. `/tracker/games/touhou`
 still redirects to the bot so old bookmarks keep working; remove `touhou` from

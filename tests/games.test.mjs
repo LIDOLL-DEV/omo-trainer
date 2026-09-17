@@ -19,10 +19,13 @@ test('Games origin rejects insecure production, embedded credentials and arbitra
   for(const value of ['http://bot.example','https://bot.example/evil','https://user:pass@bot.example','https://bot.example?token=a','https://bot.example/#x','http://127.0.0.1:4000'])assert.throws(()=>createGamesRoute('/',{LIDOLLBOT_PUBLIC_ORIGIN:value,NODE_ENV:'production'}));
   assert.doesNotThrow(()=>createGamesRoute('/',{LIDOLLBOT_PUBLIC_ORIGIN:'http://127.0.0.1:4000',NODE_ENV:'test'}));
 });
-test('Games shell offers five separate tabs with link instructions and a cached offline module',()=>{
+test('Games shell offers each tab with link instructions and a cached offline module',()=>{
   const read=path=>readFileSync(new URL(`../${path}`,import.meta.url),'utf8'),html=read('index.html');
   assert.doesNotMatch(html,/games\/touhou|Touhou/); // Touhou Trader is no longer listed; its redirect stays for old bookmarks.
   for(const game of ['diapers','hangman','balldrop','clothes','littlepottchi'])assert.match(html,new RegExp(`href="./games/${game}" target="_blank" rel="noopener noreferrer"`));
+  assert.match(html,/LidollQuest-Companion/);assert.match(html,/href="\.\/companion\/"/); // The companion is a same-origin tracker page, so it is not a bot redirect and does not open cross-origin.
+  const bot=createGamesRoute('/tracker/',{LIDOLLBOT_PUBLIC_ORIGIN:'https://bot.example',NODE_ENV:'production'}),probe={setHeader(){},writeHead(status){probe.status=status;},end(){}};
+  bot({method:'GET'},probe,'/tracker/games/lidollquest-companion');assert.equal(probe.status,404,'the companion must not redirect to a bot route nothing serves');
   assert.match(html,/No Discord account or membership is needed/);assert.doesNotMatch(html,/<iframe/i);assert.match(read('sw.js'),/\.\/lib\/games.js/);
   assert.match(read('scripts/serve.mjs'),/createGamesRoute/);assert.match(read('app.js'),/import '\.\/lib\/games.js'/);
 });

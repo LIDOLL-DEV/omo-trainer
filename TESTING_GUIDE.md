@@ -185,6 +185,29 @@ before any push is attempted, that **Cancel queued** retracts unread in-app
 copies, and that a disabled recipient still disables Send rather than silently
 becoming a broadcast. Push transport is mocked; no live messages are sent.
 
+## LidollQuest-Companion (2026-09-17)
+
+`npm test` includes `tests/companion.test.mjs`: the page and its assets serve
+from the tracker origin, `/tracker/companion` redirects to `/tracker/companion/`,
+the page calls the gateway relatively with `same-origin` credentials and carries
+no bearer token or bot origin, the consent table keeps a fixed
+`game-wallet-companion` destination with a `standalone` fallback, an unlinked
+visitor gets `{linked:false}` rather than an error, and the gateway still returns
+403 for a companion read carrying a foreign `Origin` or `Sec-Fetch-Site:
+cross-site`. `tests/games.test.mjs` additionally asserts the companion is *not*
+a bot redirect (`/tracker/games/lidollquest-companion` must 404) and that the
+card links to `./companion/`.
+
+The companion's server behaviour lives in the LiDollQuest service checkout. Run
+`npm test` there for `test/item-sales.test.mjs`, which now covers: a companion
+read returning bank items away from a bank fixture while an ordinary read still
+returns none; companion paging clamping out-of-range pages and never writing the
+stored `bankPage`; a `bank_sell` succeeding with the presence row deleted
+entirely; forged `item_instance` and unknown `bank_item` rejection; a capped sale
+leaving the item in storage and paying nothing; and a replayed `request_id`
+paying exactly once. The daily coin allowance is read from `DAILY_COIN_CAP`, so
+those tests follow `config.daily_coin_cap` instead of a hard-coded 250.
+
 ## Linked Growth Chart (2026-09-12)
 
 `npm test` includes growth-chart.test.mjs: bounded validation, SQLite persistence,
@@ -430,3 +453,13 @@ settings API, saving, reload, device re-enrollment and mobile layouts.
 ## Security regression checks
 
 Run `npm test` for `security-hardening.test.mjs`, `security-services.test.mjs` and `reward-configuration.test.mjs`. These exercise signed revocation, real malformed HTTP against both services, bounded upload admission, post fanout, activity retention, persistent reward budgets, proof-bound minting and repeatable key provisioning. Browser fixtures use disposable signed identity services; production has no fixture bypass. Run `node tests/mommybot-diamonds-integration.mjs` with the adjacent updated MommyBot checkout to verify its real wallet signer end to end. These tests do not send Discord messages or touch production accounts.
+
+## LiDollQuest friend activity
+
+Accepted friends can see Playing LiDollQuest in Friends and receive a stored activity entry when a linked game starts. The game also shows a Friends badge and a brief notice. Activity contains only the member display name and game name. Unfriending removes visibility; pending requests and strangers receive nothing.
+
+Settings > Friends playing LiDollQuest is an optional push preference (`friendGames`, stored as `friend_games`), off by default. It uses existing device permission, subscriptions and quiet hours. Expired play sessions and ended friendships suppress queued alerts. The activity feed remains available with push disabled.
+
+The existing scoped Quest social POST accepts `{action:"presence",session:"unique-window-id",playing:true}`; the authenticated grant determines the owner. Session IDs contain 8-80 letters, digits, underscores or hyphens. Heartbeats are expected every 30 seconds and expire after 90 seconds. Multiple windows coalesce; repeated starts have a five-minute notification cooldown. Send `playing:false` on leaving play. GET social and Friends rows expose `playing` and `gameStarted` only to accepted friends.
+
+Additive SQLite tables preserve existing accounts, friendships, subscriptions and records. Deploy the tracker service/UI before the rebuilt game. `tests/game-presence.test.mjs` covers ownership, duplicate heartbeats, expiry, multiwindow behavior, push opt-in, quiet hours and unfriend suppression. The game repository also contains real two-player and tracker UI browser fixtures under `python/tests/fixtures/friend_activity*`.
