@@ -479,3 +479,6 @@ Additive SQLite tables preserve existing accounts, friendships, subscriptions an
 
 
 Companion validation: tests/companion.test.mjs checks static assets and consent/gateway boundaries. The game checkout python/tests/fixtures/companion_browser.mjs runs real quest/wallet APIs in Chrome, validates all character panels, mobile layout, refresh, bank paging/sale and unlink cleanup. The quest service test/companion.test.mjs checks HTTP sheet retention, ownership, cloud freshness and response size.
+
+
+The companion supports Equip on carried gear and Unequip on worn gear. Curses, full bags, dresses and used-diaper disposal follow game rules. Commands use character revision plus an equipment-source token; stale selections, combat, pending needs turns and uploads are rejected before mutation. Online characters update their committed loadout without acquiring the game controller; an offline cloud edit publishes a new complete save revision. Unsynced local-only progress remains unavailable. Rolled stats and item identity survive swaps.

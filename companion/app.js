@@ -32,7 +32,7 @@ function controls(){
   for(const id of ['character','reload','previous','next'])$('#'+id).disabled=busy;
   $('#previous').hidden=!bank||bank.page<=0;
   $('#next').hidden=!bank||bank.page>=bank.pages-1;
-  document.querySelectorAll('#bank button').forEach(button=>{button.disabled=busy;});
+  document.querySelectorAll('#bank button, button[data-equipment]').forEach(button=>{button.disabled=busy||button.dataset.locked==='true';});
 }
 async function run(work){ // One request at a time, so a sale and a page change can never interleave on the same revision.
   if(busy)return;busy=true;controls();
@@ -60,7 +60,7 @@ function renderSheet(){
    ['Childishness',sheet.childish],['Smell',info.diaper_tum_absorbed],['Accidents',info.accident_bulk],['Incontinence',info.incontinence],['Freeze',info.grossout_chance]];
   for(const [label,value] of stats)if(value!==undefined&&value!==null)facts.append(text('dt',label),text('dd',String(value)));
   host.append(facts);
-  for(const slot of sheet.equipment??[]){const row=text('div',undefined,'companion-slot');row.append(text('span',slot.slot.replace(/_/g,' '),'companion-slot-name'),text('strong',slot.name));if(slot.item?.cursed)row.append(text('span','Cursed','field-help'));$('#equipment').append(row);}
+  for(const slot of sheet.equipment??[]){const row=text('div',undefined,'companion-slot');row.append(text('span',slot.slot.replace(/_/g,' '),'companion-slot-name'),text('strong',slot.name));if(slot.item?.cursed)row.append(text('span','Cursed','field-help'));if(slot.item_id)row.append(equipmentButton('Unequip','companion_unequip',slot.slot,slot.item_id,slot.locked));$('#equipment').append(row);}
   renderInventory();
   const tush=sheet.tush;$('#tush-status').append(text('strong',tush.name),text('p',tush.status));
   if(tush.is_diaper){const meter=document.createElement('progress');meter.max=tush.capacity;meter.value=tush.wet_absorbed+tush.mess_absorbed;meter.setAttribute('aria-label','Absorption used');$('#tush-status').append(meter,text('p',tush.wet_absorbed+' wet + '+tush.mess_absorbed+' messy / '+tush.capacity+' capacity','field-help'));}
@@ -90,13 +90,14 @@ function renderInventory(){ // Draws the tab strip and the rows of the selected 
   if(!inventory.length)return void panel.append(text('p','Your bag is empty.','field-help'));
   if(!shown.length)return void panel.append(text('p','No '+current.title.toLowerCase()+' in this character’s bag.','field-help'));
   const table=document.createElement('table'),head=document.createElement('thead'),heading=document.createElement('tr'),body=document.createElement('tbody');
-  for(const value of ['Item','Type','Details']){const cell=text('th',value);cell.scope='col';heading.append(cell);}head.append(heading);table.append(head,body);
+  for(const value of ['Item','Type','Details','Action']){const cell=text('th',value);cell.scope='col';heading.append(cell);}head.append(heading);table.append(head,body);
   for(const item of shown){
     const row=document.createElement('tr'),detail=[];
     for(const key of ['atk','def','bulk','childish','hp_restore','mp_restore'])if(item[key]!==undefined)detail.push(key.replace(/_/g,' ')+': '+item[key]);
     if(item.cursed)detail.push('Cursed');
     if((item.quantity??item.count??1)>1)detail.push('Quantity: '+(item.quantity??item.count));
     row.append(text('td',item.name,'wrap'),text('td',drink(item)?'Drink':shortLabels[item.category]??'Item'),text('td',detail.join(' · ')||'—','wrap')); // Bottled food reads "Drink" and unknown categories read "Item", exactly as the game's own grids label them.
+    const action=text('td');if(item.equippable)action.append(equipmentButton('Equip','companion_equip',item.index,item.item_id,false));row.append(action);
     body.append(row);
   }
   panel.append(table);
@@ -136,6 +137,16 @@ function sellButton(entry,item){
   }));
   return button;
 }
+function equipmentButton(label,action,slot,itemId,locked){
+ const button=text('button',label,'button small secondary');button.type='button';button.dataset.equipment='true';
+ button.dataset.locked=String(Boolean(locked)||!snapshot.sheet.equipmentEditable);button.disabled=busy||button.dataset.locked==='true';
+ button.title=locked?'This cursed item cannot be removed.':!snapshot.sheet.equipmentEditable?'Finish combat or the current game action before changing equipment.':label+' this item';
+ button.addEventListener('click',()=>void run(async()=>{
+  const result=await request('zones/action',{action,character_id:snapshot.character.id,revision:snapshot.character.revision,controller:controller(),request_id:crypto.randomUUID(),slot,item_id:itemId,equipment_version:snapshot.sheet.equipment_version});
+  apply(result);$('#status').textContent=label==='Equip'?'Item equipped.':'Item unequipped.';
+ }));
+ return button;
+} // Revision and source tokens prevent an old inventory row from selecting a different item after a game action.
 function controller(){ // A stable per-tab controller id keeps the arena's single-window rules satisfied without claiming a zone.
   try{let value=sessionStorage.getItem('lidoll.companion.controller');if(!value){value=crypto.randomUUID();sessionStorage.setItem('lidoll.companion.controller',value);}return value;}
   catch{return 'companion';}
