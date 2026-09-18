@@ -44,6 +44,23 @@ test('the companion calls the gateway same-origin and never carries a bot origin
   assert.match(read('index.html'), /href="\.\/companion\/"/);
 });
 
+test('the item tabs mirror the game’s own categories and filter without another request', () => {
+  const app = read('companion/app.js');
+  assert.match(app, /\{id:'all',label:'ALL'/); // The All catch-all is what keeps quest items and any future category reachable.
+  for (const group of ['clothes', 'weapons', 'food', 'drinks']) assert.match(app, new RegExp(`id:'${group}'`), `${group} mirrors inv_battle_overlay_groups()`);
+  assert.match(app, /const drink=item=>item\.category==='drink'\|\|item\.is_drink===true/); // inv_item_is_drink: bottled food belongs on Drinks.
+  assert.match(app, /match:item=>item\.category==='food'&&!drink\(item\)/); // ...and must therefore leave the Food tab.
+  assert.match(app, /diaper_cover:'Cover'/); // The Type column uses inv_category_short_label, not the raw category id.
+  assert.match(app, /sessionStorage\.setItem\('lidoll\.companion\.tab'/); // The chosen tab survives the 15-second refresh instead of snapping back to All.
+  for (const name of ['renderInventory', 'selectTab']) { // Switching tabs filters the sheet already in hand; it never re-reads the gateway.
+    const body = app.match(new RegExp(`function ${name}\\([\\s\\S]*?\\n\\}`))?.[0];
+    assert.ok(body, `${name} must exist`);
+    assert.doesNotMatch(body, /\brequest\(|\bfetch\(/, `${name} must filter the snapshot locally, not call the gateway`);
+  }
+  assert.match(read('companion/index.html'), /id="inventory-tabs"[^>]*role="tablist"/);
+  assert.doesNotMatch(read('companion/style.css'), /var\(--accent/); // No theme defines --accent; the pills and meter must use real theme tokens.
+});
+
 test('the consent flow keeps a fixed companion return destination', () => {
   const api = read('server/coin-browser-api.mjs');
   assert.match(api, /companion:\{login:'game-wallet-companion',form:'companion',back:base\+'companion\/'\}/);

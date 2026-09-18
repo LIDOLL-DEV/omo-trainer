@@ -18,5 +18,12 @@
 .companion-tush canvas{display:block;max-width:100%;width:20rem;height:auto;border-radius:.75rem;}
 .companion-facts{grid-template-columns:repeat(2,minmax(0,1fr));font-variant-numeric:tabular-nums;}
 .companion-page td.wrap{white-space:normal;overflow-wrap:anywhere;}
-.companion-page progress{width:100%;accent-color:var(--accent,#c958ad);}
+.companion-page progress{width:100%;accent-color:var(--pink);} /* --accent is defined by no theme; the absorption meter must follow the real theme token. */
+/* Item category tabs: the game's four battle groups plus All, sized for thumbs as well as pointers. */
+.companion-tabs{display:flex;flex-wrap:wrap;gap:.35rem;margin:0 0 .75rem;}
+.companion-tab{display:inline-flex;align-items:center;gap:.4rem;min-height:2.25rem;padding:.35rem .85rem;border:1px solid var(--border);border-radius:999px;background:var(--panel);color:var(--ink);font:inherit;font-size:.78rem;font-weight:700;letter-spacing:.05em;cursor:pointer;} /* A filled pill so an unselected tab still reads as a control, not as a caption. */
+.companion-tab:hover{border-color:var(--pink);color:var(--pink);}
+.companion-tab[aria-selected="true"]{background:var(--pink);border-color:var(--pink);color:var(--page);}
+.companion-tab-count{font-weight:600;font-size:.72rem;opacity:.75;font-variant-numeric:tabular-nums;}
+.companion-page #inventory:focus-visible{outline:2px solid var(--pink);outline-offset:2px;border-radius:.5rem;}
 @media(max-width:38rem){.companion-overview{grid-template-columns:1fr;}.companion-doll canvas{max-height:32rem;}.companion-page main{padding-inline:.75rem;}}

@@ -5,6 +5,20 @@ const gateway='../api/lidollcoin/browser/'; // Same-origin gateway: the wallet c
 const coins=value=>Number(value).toLocaleString();
 const text=(tag,value,className)=>{const node=document.createElement(tag);if(value!==undefined)node.textContent=value;if(className)node.className=className;return node;};
 
+// ── Item categories: a port of the game's own item viewer, so a tab means the same thing in both places. ──
+const clothing=new Set(['torso','dress','pants','skirt','panties','diaper_cover','socks','shoes','head','mouth','bra','corset','gloves','plug','accessory','special']); // inv_is_clothing_category()
+const drink=item=>item.category==='drink'||item.is_drink===true; // inv_item_is_drink(): bottled "food" counts as a drink.
+const groups=[ // The game's four battle tabs (inv_battle_overlay_groups) plus All, so quest items and future categories stay reachable.
+ {id:'all',label:'ALL',title:'All items',match:()=>true},
+ {id:'clothes',label:'CLOTHES',title:'Clothes',match:item=>clothing.has(item.category)},
+ {id:'weapons',label:'WPNS',title:'Weapons',match:item=>item.category==='weapon'},
+ {id:'food',label:'FOOD',title:'Food',match:item=>item.category==='food'&&!drink(item)},
+ {id:'drinks',label:'DRINKS',title:'Drinks',match:item=>item.category==='drink'||(item.category==='food'&&drink(item))}
+]; // inv_item_matches_group(), rule for rule.
+const shortLabels={weapon:'Weapon',food:'Food',drink:'Drink',quest_item:'Key',torso:'Torso',dress:'Dress',pants:'Pants',skirt:'Skirt',panties:'Panties',diaper_cover:'Cover',
+ socks:'Socks',shoes:'Shoes',head:'Head',mouth:'Mouth',bra:'Bra',corset:'Corset',gloves:'Gloves',plug:'Plug',accessory:'Accessory',special:'Special'}; // inv_category_short_label()
+let tab=(()=>{try{return sessionStorage.getItem('lidoll.companion.tab')??'all';}catch{return 'all';}})(); // A remembered tab survives the 15-second refresh and a reload; it holds no private detail.
+
 async function request(route,input,query='') { // Every companion read and sale is an authenticated same-origin call; no token is ever exposed to this page.
   const response=await fetch(gateway+route+query,{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(20000),...(input?{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify(input)}:{})});
   const value=await response.json().catch(()=>({}));
@@ -29,7 +43,7 @@ async function run(work){ // One request at a time, so a sale and a page change 
   }finally{busy=false;controls();}
 }
 function clearSheet(){
-  for(const id of ['sheet','equipment','inventory','paperdoll','tush-status','tush-art'])$('#'+id).replaceChildren();
+  for(const id of ['sheet','equipment','inventory','inventory-tabs','paperdoll','tush-status','tush-art'])$('#'+id).replaceChildren();
   $('#freshness').textContent='';$('#inventory-summary').textContent='';
 } // Clear every character panel together, including private details after unlinking or a failed selection.
 function renderSheet(){
@@ -47,19 +61,52 @@ function renderSheet(){
   for(const [label,value] of stats)if(value!==undefined&&value!==null)facts.append(text('dt',label),text('dd',String(value)));
   host.append(facts);
   for(const slot of sheet.equipment??[]){const row=text('div',undefined,'companion-slot');row.append(text('span',slot.slot.replace(/_/g,' '),'companion-slot-name'),text('strong',slot.name));if(slot.item?.cursed)row.append(text('span','Cursed','field-help'));$('#equipment').append(row);}
-  const inventory=sheet.inventory??[];$('#inventory-summary').textContent=inventory.length+' carried item'+(inventory.length===1?'':'s');
-  if(!inventory.length)$('#inventory').append(text('p','Your bag is empty.','field-help'));
-  else {
-   const table=document.createElement('table'),head=document.createElement('thead'),heading=document.createElement('tr'),body=document.createElement('tbody');
-   for(const value of ['Item','Type','Details']){const cell=text('th',value);cell.scope='col';heading.append(cell);}head.append(heading);table.append(head,body);
-   for(const item of inventory){const row=document.createElement('tr'),detail=[];for(const key of ['atk','def','bulk','childish','hp_restore','mp_restore'])if(item[key]!==undefined)detail.push(key.replace(/_/g,' ')+': '+item[key]);if(item.cursed)detail.push('Cursed');if((item.quantity??item.count??1)>1)detail.push('Quantity: '+(item.quantity??item.count));row.append(text('td',item.name,'wrap'),text('td',item.category),text('td',detail.join(' · ')||'—','wrap'));body.append(row);}
-   $('#inventory').append(table);
-  }
+  renderInventory();
   const tush=sheet.tush;$('#tush-status').append(text('strong',tush.name),text('p',tush.status));
   if(tush.is_diaper){const meter=document.createElement('progress');meter.max=tush.capacity;meter.value=tush.wet_absorbed+tush.mess_absorbed;meter.setAttribute('aria-label','Absorption used');$('#tush-status').append(meter,text('p',tush.wet_absorbed+' wet + '+tush.mess_absorbed+' messy / '+tush.capacity+' capacity','field-help'));}
   if(tush.item_id)$('#tush-status').append(text('p','Bulk: '+tush.bulk,'field-help'));
   void drawCharacter(sheet,$('#paperdoll'),$('#tush-art'));
 } // Every displayed field comes from the same selected-character snapshot; inventory entries keep their individual rolled stats.
+function renderInventory(){ // Draws the tab strip and the rows of the selected tab only; filtering never leaves this page.
+  const inventory=snapshot?.sheet?.inventory??[],tabs=$('#inventory-tabs'),panel=$('#inventory');
+  const held=tabs.contains(document.activeElement); // Keep keyboard focus on the strip when the 15-second refresh redraws it.
+  if(!groups.some(group=>group.id===tab))tab='all'; // A stale or hand-edited tab id falls back to the catch-all instead of hiding everything.
+  const current=groups.find(group=>group.id===tab),counts=new Map(groups.map(group=>[group.id,inventory.filter(group.match).length]));
+  tabs.replaceChildren();panel.replaceChildren();
+  for(const group of groups){
+    const button=text('button',group.label,'companion-tab'),selected=group.id===tab;
+    button.type='button';button.id='inventory-tab-'+group.id;button.title=group.title;button.setAttribute('role','tab');
+    button.setAttribute('aria-label',group.title+' · '+counts.get(group.id)+' item'+(counts.get(group.id)===1?'':'s'));
+    button.setAttribute('aria-selected',String(selected));button.setAttribute('aria-controls','inventory');
+    button.tabIndex=selected?0:-1; // Roving tabindex: the whole strip is one Tab stop, and arrow keys move within it.
+    button.append(text('span',String(counts.get(group.id)),'companion-tab-count'));
+    button.addEventListener('click',()=>selectTab(group.id));
+    tabs.append(button);
+  }
+  panel.setAttribute('aria-labelledby','inventory-tab-'+tab);
+  if(held)$('#inventory-tab-'+tab).focus();
+  const shown=inventory.filter(current.match);
+  $('#inventory-summary').textContent=inventory.length+' carried item'+(inventory.length===1?'':'s')+(tab==='all'?'':' · showing '+shown.length+' in '+current.title.toLowerCase());
+  if(!inventory.length)return void panel.append(text('p','Your bag is empty.','field-help'));
+  if(!shown.length)return void panel.append(text('p','No '+current.title.toLowerCase()+' in this character’s bag.','field-help'));
+  const table=document.createElement('table'),head=document.createElement('thead'),heading=document.createElement('tr'),body=document.createElement('tbody');
+  for(const value of ['Item','Type','Details']){const cell=text('th',value);cell.scope='col';heading.append(cell);}head.append(heading);table.append(head,body);
+  for(const item of shown){
+    const row=document.createElement('tr'),detail=[];
+    for(const key of ['atk','def','bulk','childish','hp_restore','mp_restore'])if(item[key]!==undefined)detail.push(key.replace(/_/g,' ')+': '+item[key]);
+    if(item.cursed)detail.push('Cursed');
+    if((item.quantity??item.count??1)>1)detail.push('Quantity: '+(item.quantity??item.count));
+    row.append(text('td',item.name,'wrap'),text('td',drink(item)?'Drink':shortLabels[item.category]??'Item'),text('td',detail.join(' · ')||'—','wrap')); // Bottled food reads "Drink" and unknown categories read "Item", exactly as the game's own grids label them.
+    body.append(row);
+  }
+  panel.append(table);
+} // The snapshot is never re-fetched to change tabs: every category is already in the one sheet the page holds.
+function selectTab(id,focus){
+  if(id===tab)return;
+  tab=id;try{sessionStorage.setItem('lidoll.companion.tab',id);}catch{} // Private-mode storage failures must never break the strip.
+  renderInventory();
+  if(focus)$('#inventory-tab-'+id).focus(); // Arrow-key moves carry focus along; a click leaves it where the pointer put it.
+}
 function renderBank(){
   const host=$('#bank');host.replaceChildren();
   if(!bank){$('#bank-summary').textContent='';return;}
@@ -114,6 +161,12 @@ async function load(){
   apply(snapshot);
 }
 $('#character').addEventListener('change',()=>{active=$('#character').value;page=0;clearSheet();bank=null;snapshot=null;renderBank();$('#status').textContent='Loading character?';$('#bank-status').textContent='';void run(load);});
+$('#inventory-tabs').addEventListener('keydown',event=>{ // Arrow keys cycle tabs the way the game's shoulder buttons do, wrapping at both ends.
+  const step={ArrowLeft:-1,ArrowRight:1,Home:'first',End:'last'}[event.key];if(step===undefined)return;
+  const index=groups.findIndex(group=>group.id===tab);
+  const next=step==='first'?0:step==='last'?groups.length-1:(index+step+groups.length)%groups.length;
+  event.preventDefault();selectTab(groups[next].id,true);
+});
 $('#reload').addEventListener('click',()=>{$('#bank-status').textContent='';void run(load);});
 $('#previous').addEventListener('click',()=>{page=Math.max(0,(bank?.page??0)-1);void run(load);});
 $('#next').addEventListener('click',()=>{page=(bank?.page??0)+1;void run(load);});

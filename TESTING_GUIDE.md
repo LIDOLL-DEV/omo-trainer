@@ -194,9 +194,22 @@ no bearer token or bot origin, the consent table keeps a fixed
 `game-wallet-companion` destination with a `standalone` fallback, an unlinked
 visitor gets `{linked:false}` rather than an error, and the gateway still returns
 403 for a companion read carrying a foreign `Origin` or `Sec-Fetch-Site:
-cross-site`. `tests/games.test.mjs` additionally asserts the companion is *not*
+cross-site`. It also pins the item category tabs: All plus the game's four
+battle groups, the `is_drink` rule that moves bottled food onto Drinks, the
+short-label Type column, the remembered tab, `role="tablist"` markup, that
+neither `renderInventory` nor `selectTab` calls the gateway, and that no
+companion style reaches for the non-existent `--accent` token.
+`tests/games.test.mjs` additionally asserts the companion is *not*
 a bot redirect (`/tracker/games/lidollquest-companion` must 404) and that the
 card links to `./companion/`.
+
+With `PUPPETEER_MODULE` and `CHROME_PATH` set, `node tests/companion-browser.mjs`
+drives the real strip against a stubbed gateway: tab order and per-tab counts,
+each tab listing exactly its group, a quest item appearing only under All,
+arrow/Home/End cycling with wrap and a roving tabindex, the tab surviving both a
+refresh and a reload, the empty-group and empty-bag messages, no horizontal
+overflow from 320px up, and a legible selected pill in both themes. It writes
+desktop and mobile screenshots per theme into its artifacts directory.
 
 The companion's server behaviour lives in the LiDollQuest service checkout. Run
 `npm test` there for `test/item-sales.test.mjs`, which now covers: a companion

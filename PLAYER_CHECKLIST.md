@@ -99,7 +99,11 @@ Open Settings and choose **Little Log** for soft pastels or **Caregiver Tracker*
   straight from the list for LiDollCoins; you do not have to walk back to a shop,
   and you can do it while she is parked mid-dungeon. Selling is refused during a
   fight, and once you reach your daily coin allowance the item stays in your bank
-  until the UTC reset.
+  until the UTC reset. Her carried bag uses the same category tabs as the game —
+  **All**, **Clothes**, **Wpns**, **Food**, **Drinks** — each showing how many
+  items are in it. Tap one to narrow the list; bottles sit under Drinks even
+  though they are food, exactly as they do in her pack. Quest keys live under
+  All. The tab you pick stays put while the page refreshes itself.
 
 
 ## Additional event choices
@@ -217,4 +221,4 @@ Use **Notifications** in the top bar to open your Social notification history.
 - Use Edit profile picture on your own profile to open its Settings controls.
 
 
-Companion: check current/manual character selection, equipment, inventory, paperdoll, Tush Status and stats; bank paging and sales must keep the selected character. No-data characters clear old details; unlinking clears all private panels.
+Companion: check current/manual character selection, equipment, inventory, paperdoll, Tush Status and stats; bank paging and sales must keep the selected character. Check each item tab lists only its own category, that a bottle shows under Drinks, that a quest key shows only under All, and that the chosen tab survives a refresh. No-data characters clear old details; unlinking clears all private panels.
