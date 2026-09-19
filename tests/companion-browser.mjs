@@ -21,13 +21,14 @@ const inventory=[
 ];
 const snapshot={coins:120,dailyRemaining:50,dailyCap:100,characters:[{id:'char-1',name:'Tabs Tester',revision:3}],
  character:{id:'char-1',revision:3},bank:{page:0,pages:1,count:0,capacity:40,items:[]},
- sheet:{available:true,online:true,source:'online',updatedAt:'2026-09-17T12:00:00Z',name:'Tabs Tester',level:4,class_id:'knight',
+ sheet:{description:'A travelling storyteller.\n\nLoves tea.',description_revision:0,available:true,online:true,source:'online',updatedAt:'2026-09-17T12:00:00Z',name:'Tabs Tester',level:4,class_id:'knight',
   player_info:{str:9,def:4,playerHealth:40,playerHealthMax:60},equipment:[{slot:'weapon',name:'Rusty dagger',item_id:'iron_dagger'}],
   inventory,tush:{item_id:'thick_medical_diaper',name:'Thick medical diaper',is_diaper:true,status:'Damp',wet_absorbed:2,mess_absorbed:0,capacity:6,bulk:3}}};
 
 const labels=page=>page.$$eval('#inventory-tabs button',nodes=>nodes.map(node=>node.firstChild.textContent));
 const counts=page=>page.$$eval('#inventory-tabs .companion-tab-count',nodes=>nodes.map(node=>Number(node.textContent)));
 const rows=page=>page.$$eval('#inventory tbody tr td:first-child',cells=>cells.map(cell=>cell.textContent));
+const descriptionReceipts=new Map();let loseDescriptionResponse=false;
 const selected=page=>page.$eval('#inventory-tabs [aria-selected="true"]',node=>node.id);
 
 try{
@@ -38,11 +39,42 @@ try{
   page.on('request',request=>{
     const url=request.url();
     if(url.includes('/api/lidollcoin/browser/session'))return void request.respond({status:200,contentType:'application/json',body:JSON.stringify({linked:true,csrf:'test-csrf'})});
+    if(url.includes('/api/lidollcoin/browser/characters/action')){
+      const input=JSON.parse(request.postData());assert.equal(request.headers()['x-csrf-token'],'test-csrf');assert.equal(input.action,'description');assert.equal(input.character_id,'char-1');
+      let result=descriptionReceipts.get(input.request_id);
+      if(!result){
+        if(input.description_revision!==snapshot.sheet.description_revision)return void request.respond({status:409,contentType:'application/json',body:JSON.stringify({error:'description_conflict'})});
+        snapshot.sheet.description=input.description;snapshot.sheet.description_revision++;
+        result={character_id:'char-1',description:input.description,description_revision:snapshot.sheet.description_revision};descriptionReceipts.set(input.request_id,result);
+      }
+      if(loseDescriptionResponse){loseDescriptionResponse=false;return void request.respond({status:503,contentType:'application/json',body:'{}'});}
+      return void request.respond({status:200,contentType:'application/json',body:JSON.stringify(result)});
+    }
     if(url.includes('/api/lidollcoin/browser/zones'))return void request.respond({status:200,contentType:'application/json',body:JSON.stringify(snapshot)});
     return void request.continue();
   });
   await page.goto(origin+'companion/',{waitUntil:'networkidle0'});
   await page.waitForSelector('#inventory-tabs button');
+  assert.equal(await page.$eval('#description',e=>e.textContent),snapshot.sheet.description);
+  const editDescription=async value=>{await page.$eval('#description-input',(e,value)=>{e.value=value;e.dispatchEvent(new Event('input',{bubbles:true}));},value);};
+  await page.click('#description-edit');const draft='<img src=x onerror=alert(1)>\n\nA kind traveller.';await editDescription(draft);
+  await page.click('#reload');await page.waitForFunction(()=>!document.querySelector('#reload').disabled);
+  assert.equal(await page.$eval('#description-input',e=>e.value),draft,'refresh preserves an unfinished draft');
+  await page.click('#description-save');await page.waitForFunction(()=>document.querySelector('#description-status').textContent==='Description saved.');
+  assert.equal(await page.$eval('#description',e=>e.textContent),draft);assert.equal(await page.$('#description img'),null,'authored markup remains plain text');
+  await page.click('#description-edit');await editDescription('My draft');snapshot.sheet.description='Another device';snapshot.sheet.description_revision++;
+  await page.click('#description-save');await page.waitForFunction(()=>document.querySelector('#description-status').textContent.includes('Changed on another device'));
+  assert.equal(await page.$eval('#description-input',e=>e.value),'My draft');assert.equal(await page.$eval('#description',e=>e.textContent),'Another device');
+  await page.click('#description-save');await page.waitForFunction(()=>document.querySelector('#description-status').textContent==='Description saved.');assert.equal(snapshot.sheet.description,'My draft');
+  await page.click('#description-edit');await editDescription('x'.repeat(2001));assert.equal(await page.$eval('#description-save',e=>e.disabled),true);
+  await editDescription('\u{1F338}'.repeat(2000));assert.equal(await page.$eval('#description-save',e=>e.disabled),false);
+  await editDescription('');loseDescriptionResponse=true;const countBefore=descriptionReceipts.size;
+  await page.click('#description-save');await page.waitForFunction(()=>document.querySelector('#description-save').textContent==='Retry save'&&!document.querySelector('#description-save').disabled);
+  assert.equal(await page.$eval('#description-input',e=>e.disabled),true,'an uncertain write keeps its immutable draft');
+  await page.click('#description-save');await page.waitForFunction(()=>document.querySelector('#description-status').textContent==='Description saved.');
+  assert.equal(descriptionReceipts.size,countBefore+1);assert.equal(snapshot.sheet.description,'');assert.equal(await page.$eval('#description',e=>e.textContent),'No description yet.');
+  snapshot.sheet.description='A travelling storyteller.\n\nLoves tea.';
+
 
   // ── The strip mirrors the game's battle tabs, in order, behind an All catch-all ──
   assert.deepEqual(await labels(page),['ALL','CLOTHES','WPNS','FOOD','DRINKS'],'tab order must match inv_battle_overlay_groups() after All');

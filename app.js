@@ -6,7 +6,7 @@ import { renderPrediction } from './lib/prediction-view.js';
 import { DESPERATION_LEVELS, DESPERATION_LABELS, STORAGE_KEY, emptyState, validateState, validateEntry, localDay, localInput,
   timestampFromInput, rollResult, rollProbability, sortedEntries, daySummary, dailySeries, mergeBackup, toCsv } from './lib/model.js';
 import { deviceState, emptySync, queueChanges, connectAccount, reconcile, resolveConflict } from './lib/sync.js';
-import { isRoll, isObservation } from './lib/model.js';
+import { isRoll, isObservation, LIQUID_SUGGESTIONS } from './lib/model.js';
 import { diaperSummary, diaperAtTime, suggestedDiaperWettings } from './lib/diapers.js';
 import { trainingState, protocolDay, protocolFor, protocolRecord, cooldownRemaining, instantTimestamp } from './lib/training.js';
 
@@ -368,8 +368,12 @@ $('#intake-unit-toggle').addEventListener('click', () => {
 });
 displayIntake(0);
 
+const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character])); // The record tables are rendered with innerHTML, and the drink note is participant-written text.
+
+$('#liquid-suggestions').replaceChildren(...LIQUID_SUGGESTIONS.map(name => { const option = document.createElement('option'); option.value = name; return option; })); // Suggestions only; any other drink can still be typed.
+
 function seedForm(day = localDay(), resetLiquids = true) { // Carries the active diaper across dates; only intake drafts reset after saving.
-  if (resetLiquids) displayIntake(0);
+  if (resetLiquids) { displayIntake(0); $('#liquids-label').value = ''; } // The drink note belongs to one check-in, so it clears with the intake draft.
   $('#diaper').value = diaperSummary(state.entries, day).currentDiaper;
   formDay = day;
 }
@@ -414,6 +418,7 @@ function formEntry(form, original = null) { // Reads a snapshot; editing an unch
     id: original?.id ?? crypto.randomUUID(),
     occurredAt,
     liquidsMl: form.id === 'log-form' ? Math.round(readIntakeMl()) : Number(values.get('liquidsMl')), // Recording accepts either unit; the existing edit form explicitly uses mL.
+    ...(values.get('liquidsLabel')?.trim() ? { liquidsLabel: values.get('liquidsLabel') } : {}), // Optional; the model trims it and omits a blank note entirely.
     ...(values.has('position') ? { position: values.get('position') } : {}),
     diaperNumber: Number(values.get('diaperNumber')),
     ...(values.has('wettingsCount') ? { wettingsCount: Number(values.get('wettingsCount')) } : {}),
@@ -472,7 +477,8 @@ function renderRecent() { // Includes standalone rolls without borrowing unsaved
   const recent = sortedEntries(state.entries.filter(entry => entry.kind !== 'protocol')).slice(0, 4);
   $('#recent-list').innerHTML = recent.length ? recent.map(entry => {
     const description = entry.kind === 'diaper-change' ? entry.wettingsCount + ' wettings before change' : entry.kind === 'roll' ? 'Roll at ' + entry.probability + '%'+(entry.desperationMode?' &middot; Desperation mode':'') : entry.kind === 'wetting' ? 'Wetting event' : entry.liquidsMl.toLocaleString() + ' mL ' + (entry.kind === 'observation' ? 'since last check-in' : 'daily cumulative');
-    const position = (entry.position ? ' &middot; ' + positions[entry.position] : '') + (entry.diaperNumber ? ' &middot; Diaper #' + entry.diaperNumber : '');
+    const drink = entry.liquidsLabel ? ' &middot; ' + escapeHtml(entry.liquidsLabel) : '';
+    const position = drink + (entry.position ? ' &middot; ' + positions[entry.position] : '') + (entry.diaperNumber ? ' &middot; Diaper #' + entry.diaperNumber : '');
     return `<div class="recent-entry"><span class="entry-icon ${entry.result ?? 'pee'}"><svg class="icon"><use href="#i-${entry.result === 'hold' ? 'clock' : 'drop'}"/></svg></span><div class="entry-info"><strong>${dateLabel(entry.occurredAt)}</strong><p>${description}${position}${entry.desperation ? " &middot; Desperation: " + DESPERATION_LABELS[entry.desperation] : ""}</p></div><span class="result-pill ${entry.result ?? 'pee'}">${entryLabel(entry)}</span></div>`;
   }).join('') : '<div class="empty-state">NO OBSERVATIONS FILED<br>Your saved observations and rolls will appear here.</div>';
 }
@@ -492,7 +498,7 @@ function renderHistory() { // Limits initial table size while keeping filters an
   $('#history-empty').hidden = entries.length > 0;
   $('#load-more').hidden = entries.length <= historyLimit;
   $('#history-body').innerHTML = visible.map(entry => {
-    const intake = isObservation(entry) ? entry.liquidsMl.toLocaleString() + ' mL<small>' + (entry.kind === 'observation' ? 'Since last check-in' : 'Daily cumulative') + '</small>' : '&mdash;';
+    const intake = isObservation(entry) ? entry.liquidsMl.toLocaleString() + ' mL<small>' + (entry.kind === 'observation' ? 'Since last check-in' : 'Daily cumulative') + (entry.liquidsLabel ? ' &middot; ' + escapeHtml(entry.liquidsLabel) : '') + '</small>' : '&mdash;';
     const wettings = entry.kind === 'diaper-change' ? entry.wettingsCount + '<small>Before change</small>' : entry.kind === 'wetting' ? '1 event' + (entry.wettingsCount === undefined ? '' : '<small>' + entry.wettingsCount + ' in diaper</small>') : entry.wettingsCount ?? '&mdash;';
     const probability = isRoll(entry) ? entry.probability + '%' : '&mdash;';
     const provenance = entry.kind === 'diaper-change' ? 'Completed diaper' : entry.kind === 'observation' ? 'Observation' : entry.kind === 'wetting' ? 'Wetting' : entry.source === 'random' ? 'Rolled'+(entry.desperationMode?' &middot; Desperation mode':'') : 'Manual (legacy)';
@@ -751,7 +757,7 @@ $('#history-body').addEventListener('click', event => { // Delegates actions so 
     $('#edit-liquids').previousElementSibling.textContent = editedEntry.kind === 'observation' ? 'Liquids since previous check-in (mL)' : 'Daily cumulative liquids (mL)';
     for (const id of ['#edit-probability', '#edit-result']) $(id).disabled = editedEntry.kind === 'observation';
     $('#edit-probability').closest('.field-pair').hidden = editedEntry.kind === 'observation';
-    for (const key of ['id', 'liquidsMl', 'position', 'diaperNumber', 'wettingsCount', 'probability', 'result']) $('#edit-form').elements.namedItem(key).value = editedEntry[key] ?? '';
+    for (const key of ['id', 'liquidsMl', 'liquidsLabel', 'position', 'diaperNumber', 'wettingsCount', 'probability', 'result']) $('#edit-form').elements.namedItem(key).value = editedEntry[key] ?? '';
     for (const [selector, key] of [['#edit-position', 'position'], ['#edit-wettings', 'wettingsCount']]) {
       $(selector).disabled = editedEntry[key] === undefined;
       $(selector).parentElement.hidden = editedEntry[key] === undefined; // Historical snapshots keep their original editable fields.

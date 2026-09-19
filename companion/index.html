@@ -5,7 +5,15 @@
 <section id="content" hidden>
  <section class="card"><div class="companion-bank-heading"><h2>Character</h2><button id="reload" class="button secondary" type="button">Refresh</button></div>
   <p><label for="character">Your characters</label><select id="character"></select></p><p id="wallet" class="field-help"></p><p id="freshness" class="field-help"></p>
-  <div class="companion-overview"><section aria-label="Paperdoll"><h3>Paperdoll</h3><div id="paperdoll" class="companion-doll"></div></section>
+  <div class="companion-overview"><section aria-label="Paperdoll"><h3>Paperdoll</h3><div id="paperdoll" class="companion-doll"></div>
+   <section id="description-panel" hidden aria-labelledby="description-heading"><h3 id="description-heading">Character description</h3>
+    <p id="description" class="companion-description"></p><button id="description-edit" type="button" class="button secondary">Edit description</button>
+    <form id="description-form" hidden><label for="description-input">Describe your character</label>
+     <p id="description-help" class="field-help">Public on your playerdoll previews. Free to edit; up to 2,000 characters. Leave blank to clear.</p>
+     <textarea id="description-input" rows="8" aria-describedby="description-help description-count"></textarea><p id="description-count" class="field-help"></p>
+     <div class="notification-actions"><button id="description-save" type="submit" class="button primary">Save description</button><button id="description-cancel" type="button" class="button secondary">Cancel</button></div>
+    </form><p id="description-status" role="status" class="field-help"></p>
+   </section></section>
    <div><div id="sheet"></div><section aria-label="Tush status"><h3>Tush Status</h3><div id="tush-status"></div><div id="tush-art" class="companion-tush"></div></section></div></div>
   <h3>Equipped</h3><div id="equipment" class="companion-gear"></div>
  </section>

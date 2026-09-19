@@ -19,6 +19,12 @@ Little Log now appears as a recovered Chrysalis observation terminal. **Record a
 - You can also choose **Sign in to sync** beside the save status at the top of any page. After signing in, **Connect device** opens Settings so you can review and approve uploading this device's entries. The header button disappears once this device is connected and signed in.
 - If you need an account, choose **Create account**, enter a username and a password twice, then review the app's identity access. Back in the tracker, choose **Connect & upload my entries** when ready to sync your local records.
 - Check the time and enter liquids consumed since your previous saved check-in in mL. Choose **Save liquids** to record it; the intake field then resets to zero.
+- **What did you drink?** is optional. Type anything, or pick from the suggestions. It is saved with that check-in, shown in your recent records and history, and included in your CSV export. Leave it blank and nothing is stored. It clears after saving, like the intake amount.
+- [ ] Save a check-in with a drink note and confirm it appears in Recent records and in the History table beside the amount.
+- [ ] Save one without a note and confirm nothing extra is shown.
+- [ ] Edit a saved check-in, add or change its note, and confirm it updates.
+- [ ] Export CSV and confirm a `liquidsLabel` column holds the note.
+- [ ] Confirm the note stays private: with record sharing on, a water-log post to a friend still shows only the amount.
 - Choose the check-in diaper number. Select **Your position** in the roll card before rolling. In **Record a wetting**, classify one actual event; its diaper number is assigned automatically from records at the event time.
 - Use **Record a diaper change** below the wetting form to save each change and the number of wettings that diaper received. Correct the suggestion for unlogged or overnight wettings; 0 records a dry change. The next diaper number is suggested after saving.
 - The main protocol starts at 50% with your first saved record. Use **Roll** in its own card to draw using the daily chance. It saves the roll and its selected position, leaving your unfinished observation alone. A Hold pauses further rolls for fifteen minutes; **Save liquids** and wetting logging stay available.

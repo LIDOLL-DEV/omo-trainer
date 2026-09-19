@@ -14,6 +14,9 @@
 
 .companion-overview{display:grid;grid-template-columns:minmax(12rem,1fr) minmax(15rem,1.25fr);gap:1.5rem;align-items:start;}
 .companion-doll{background:rgb(0 0 0 / 5%);border-radius:1rem;overflow:hidden;}
+.companion-description{white-space:pre-wrap;overflow-wrap:anywhere;max-height:20rem;overflow:auto;} /* Preserve paragraphs and contain even a full-length unbroken description. */
+#description-input{box-sizing:border-box;width:100%;max-width:100%;resize:vertical;font:inherit;line-height:1.5;}
+.companion-overview>section{min-width:0;}
 .companion-doll canvas{display:block;width:100%;max-height:44rem;object-fit:contain;}
 .companion-tush canvas{display:block;max-width:100%;width:20rem;height:auto;border-radius:.75rem;}
 .companion-facts{grid-template-columns:repeat(2,minmax(0,1fr));font-variant-numeric:tabular-nums;}

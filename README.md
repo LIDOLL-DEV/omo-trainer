@@ -1,5 +1,12 @@
 # Little Log
 
+The LiDollQuest companion lets players edit a public character description beneath
+their paperdoll. Edits are free, allow paragraphs and 2,000 characters, and remain
+saved per character. Refreshes preserve drafts; conflicting device edits are shown
+for review. Deploy with the quest service's `description` action support. The game
+client update displays descriptions in inspection and captured RP paperdoll previews.
+`tests/companion-browser.mjs` checks saving, clearing, conflicts and retry behavior.
+
 Administrator device statistics: [STATISTICS_API.md](STATISTICS_API.md) documents the read-only API, revocable admin tokens, everyone overview and individual drilldown, plus the CrowPanel Advance 7-inch V1.4 companion setup.
 
 A phone-friendly PWA for **lidoll.dev/tracker/** with central SQLite storage and shared lidoll.dev authentication. Two Node services run on the service server: Little Log (4173) and the reusable OpenID Connect identity service (4180). The web server reverse-proxies both over HTTPS.

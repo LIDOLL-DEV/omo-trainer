@@ -9,6 +9,41 @@ allowlisted in `server/login.mjs` and do not imply tracker upload consent.
 
 Desperation roll mode uses version-3 roll metadata and a device preference independent of the urgency slider. Preserve exact half-percent chances and the protocol's `lastFailureDesperationMode` through validation, sync, deletion handling and all exports. Cooldowns depend on saved records, never the current checkbox. See [GENERATION_TUNING_GUIDE.md](GENERATION_TUNING_GUIDE.md).
 
+## Drink notes on intake records
+
+Check-ins and legacy cumulative snapshots accept an optional `liquidsLabel`: free
+text recording *what* was drunk, beside the `liquidsMl` amount. It is absent unless
+the participant types something, so existing records, exports and summaries are
+unchanged.
+
+`liquidsLabel` is the **first participant-written free text to reach the record
+tables and the CSV export**, and three consequences follow from that:
+
+- `validateEntry` strips control, bidi-override and separator characters
+  (`\p{C}\p{Zl}\p{Zp}`), collapses whitespace, trims, and omits the field entirely
+  when nothing is left. A right-to-left override inside a table cell could
+  otherwise disguise the rest of the row. Length is capped at `LIQUID_LABEL_MAX`.
+- `app.js` renders the record tables with `innerHTML`, where every other
+  interpolated value is a number, an enum or a date. The note goes through
+  `escapeHtml` at both render sites. **If you add another free-text field, escape
+  it too, or build that cell with `textContent` as `lib/social.js` does.**
+- `toCsv` now guards a leading `=`, `+`, `-`, `@`, tab or carriage return with an
+  apostrophe so a note cannot open a spreadsheet formula. The guard applies to
+  strings only, so no numeric column is rewritten as text.
+
+**It is deliberately private.** Water-log posts still read "Liquids logged - 200 mL"
+and carry no note; `server/social.mjs` projects a fixed field list, so the note is
+structurally excluded from posts, activity and friend notifications. AI analysis
+receives daily aggregates, never raw entries. A test holds this. Publishing it
+would be a disclosure participants did not ask for when they typed it, so if that
+should change, change it deliberately and say so in the UI.
+
+No migration is needed: the server stores the whole validated entry in
+`payload_json` and denormalises only the columns it queries.
+
+`LIQUID_SUGGESTIONS` populates a datalist on both the record form and the edit
+dialog. It is a hint, not a restriction; any drink can be typed.
+
 ## Persistent device sign-in
 
 `server/sessions.mjs` owns the 30-day rolling / 180-day absolute app-session policy. Browser routes must await `login.session(request,response)` so the HttpOnly cookie and SQLite expiry advance together; preserve that Set-Cookie header when also issuing wallet cookies. Never revive expired/revoked sessions, rotate credentials on ordinary polling, or trust localStorage account IDs as authentication. Live Little Log permissions remain authoritative. See [AUTH_GUIDE.md](AUTH_GUIDE.md) for deployment and signed cross-service revocation and deployment requirements.

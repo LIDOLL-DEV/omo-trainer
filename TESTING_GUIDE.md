@@ -94,6 +94,26 @@ Nginx snippets are deployment templates; validate them against the real server c
 For a new auth proxy host, follow [AUTH_PROXY_SETUP.md](AUTH_PROXY_SETUP.md): validate the HTTP bootstrap before certificate issuance, then validate the complete HTTPS configuration before reload. Check HTTP redirects to the fixed auth origin, certificate challenge URLs remain local, HTTPS discovery reports the correct issuer, and the real OIDC sign-in succeeds. Verify Certbot renewal with `certbot renew --dry-run` and confirm a renewal schedule and Nginx reload hook exist.
 
 
+## Drink notes
+
+`tests/liquid-label.test.mjs` covers the optional `liquidsLabel` on check-ins and
+legacy cumulative snapshots: trimming and whitespace collapse, omission when blank,
+stripping of control/bidi/separator characters, the length and type refusals,
+round-trip through `validateState` and through a real `openDatabase` sync, the new
+CSV column, the spreadsheet-formula guard, and that existing numeric and enum
+columns keep their exact shape.
+
+It also holds the privacy promise: with record sharing enabled, a water-log post to
+a friend still carries only the amount, and the note appears in neither the post,
+the record payload nor the friend's activity feed, while the owner's own record
+keeps it.
+
+Rendering is not covered by `npm test`, because the record tables need a real DOM.
+Check by hand, or with a browser harness, that a note containing markup such as
+`Juice <img src=x onerror=alert(1)>` appears as visible text in both Recent records
+and the History table rather than as a tag. Both sites render through `innerHTML`
+and rely on `escapeHtml` in `app.js`.
+
 ## Intake units
 
 `tests/training-browser.mjs` checks conversion of 250 mL, saving 12.5 US fl oz as

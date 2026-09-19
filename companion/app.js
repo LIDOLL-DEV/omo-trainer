@@ -1,6 +1,7 @@
 import {drawCharacter} from './paperdoll.js';
 const $=selector=>document.querySelector(selector);
 let csrf='',characters=[],active='',bank=null,page=0,busy=false,snapshot=null;
+let descriptionDraft=null; // Keep the target and description version fixed while polling refreshes the rest of the character.
 const gateway='../api/lidollcoin/browser/'; // Same-origin gateway: the wallet cookie is Path-scoped to it and never leaves the tracker.
 const coins=value=>Number(value).toLocaleString();
 const text=(tag,value,className)=>{const node=document.createElement(tag);if(value!==undefined)node.textContent=value;if(className)node.className=className;return node;};
@@ -26,6 +27,7 @@ async function request(route,input,query='') { // Every companion read and sale 
   return value;
 }
 function unlinked(message){ // A missing or revoked wallet connection is an invitation to link, never an error message.
+  resetDescription();
   characters=[];bank=null;snapshot=null;active='';page=0;csrf='';clearSheet();$('#bank').replaceChildren();$('#wallet').textContent='';$('#content').hidden=true;$('#link').hidden=false;$('#status').textContent=message;
 }
 function controls(){
@@ -33,6 +35,11 @@ function controls(){
   $('#previous').hidden=!bank||bank.page<=0;
   $('#next').hidden=!bank||bank.page>=bank.pages-1;
   document.querySelectorAll('#bank button, button[data-equipment]').forEach(button=>{button.disabled=busy||button.dataset.locked==='true';});
+  $('#description-edit').disabled=busy;
+  $('#description-save').disabled=busy||!snapshot?.character||Array.from($('#description-input').value).length>2000;
+  $('#description-input').disabled=busy||Boolean(descriptionDraft?.pending);
+  $('#description-cancel').disabled=busy||Boolean(descriptionDraft?.pending);
+  $('#description-save').textContent=descriptionDraft?.pending?'Retry save':descriptionDraft?.conflict?'Save over latest description':'Save description';
 }
 async function run(work){ // One request at a time, so a sale and a page change can never interleave on the same revision.
   if(busy)return;busy=true;controls();
@@ -45,9 +52,11 @@ async function run(work){ // One request at a time, so a sale and a page change 
 function clearSheet(){
   for(const id of ['sheet','equipment','inventory','inventory-tabs','paperdoll','tush-status','tush-art'])$('#'+id).replaceChildren();
   $('#freshness').textContent='';$('#inventory-summary').textContent='';
+  $('#description').textContent='';$('#description-panel').hidden=!descriptionDraft;
 } // Clear every character panel together, including private details after unlinking or a failed selection.
 function renderSheet(){
   clearSheet();const sheet=snapshot?.sheet,host=$('#sheet');
+  renderDescription();
   if(!sheet?.available){host.append(text('p','No synced character details yet. Save this character in the game with cloud sync enabled, or enter an online hub.','field-help'));return;}
   const info=sheet.player_info??{};
   $('#freshness').textContent=(sheet.online?'Playing online · updates every 15 seconds':sheet.source==='cloud'?'Latest cloud save':'Last synced online state')+(sheet.updatedAt?' · '+new Date(sheet.updatedAt).toLocaleString():'');
@@ -67,6 +76,48 @@ function renderSheet(){
   if(tush.item_id)$('#tush-status').append(text('p','Bulk: '+tush.bulk,'field-help'));
   void drawCharacter(sheet,$('#paperdoll'),$('#tush-art'));
 } // Every displayed field comes from the same selected-character snapshot; inventory entries keep their individual rolled stats.
+function resetDescription(){
+  descriptionDraft=null;$('#description-input').value='';$('#description-form').hidden=true;$('#description-edit').hidden=false;$('#description-status').textContent='';$('#description-panel').hidden=true;
+} // Account changes and explicit character selection discard the old character's private draft.
+function renderDescription(){
+  const character=snapshot?.character,sheet=snapshot?.sheet;
+  if(descriptionDraft&&descriptionDraft.character!==character?.id)resetDescription();
+  $('#description-panel').hidden=!character;
+  $('#description').textContent=sheet?.description||'No description yet.'; // Plain text only: player-authored HTML is never interpreted.
+  $('#description-edit').hidden=Boolean(descriptionDraft);
+  $('#description-edit').disabled=busy;
+  $('#description-form').hidden=!descriptionDraft;
+  $('#description-count').textContent=Array.from($('#description-input').value).length+' / 2,000 characters';
+}
+$('#description-edit').addEventListener('click',()=>{
+  if(busy||!snapshot?.character)return;
+  descriptionDraft={character:snapshot.character.id,version:snapshot.sheet?.description_revision??0,pending:null};
+  $('#description-input').value=snapshot.sheet?.description??'';$('#description-status').textContent='';renderDescription();controls();$('#description-input').focus();
+});
+$('#description-input').addEventListener('input',()=>{renderDescription();controls();});
+$('#description-cancel').addEventListener('click',()=>{if(busy||descriptionDraft?.pending)return;resetDescription();renderDescription();controls();});
+$('#description-form').addEventListener('submit',event=>{
+  event.preventDefault();if(busy||!descriptionDraft||descriptionDraft.character!==snapshot?.character?.id)return;
+  if(Array.from($('#description-input').value).length>2000){$('#description-status').textContent='Please shorten your description to 2,000 characters.';return;}
+  void run(async()=>{
+    const draft=descriptionDraft;
+    draft.pending??={action:'description',character_id:draft.character,description_revision:draft.version,description:$('#description-input').value,request_id:crypto.randomUUID()};
+    controls();
+    try{
+      const result=await request('characters/action',draft.pending);
+      snapshot.sheet={...snapshot.sheet,description:result.description,description_revision:result.description_revision};
+      if(Number.isSafeInteger(result.revision))snapshot.character.revision=result.revision; // Subsequent bank or equipment actions use the newly committed character revision.
+      resetDescription();renderDescription();$('#description-status').textContent='Description saved.';
+    }catch(error){
+      if(error.status&&error.status<500&&error.status!==429)draft.pending=null; // Uncertain responses keep the same receipt for safe retries.
+      if(error.code==='description_conflict'){
+        await load();
+        if(descriptionDraft===draft){draft.version=snapshot.sheet?.description_revision??0;draft.conflict=true;$('#description-status').textContent='Changed on another device. Your draft is kept below; review the latest description above before saving over it.';}
+      }else if([401,403].includes(error.status))throw error;
+      else $('#description-status').textContent=draft.pending?'Connection interrupted. Retry save to check whether it was saved.':error.message;
+    }
+  });
+}); // Editing is free, and its independent version never conflicts merely because the player moved online.
 function renderInventory(){ // Draws the tab strip and the rows of the selected tab only; filtering never leaves this page.
   const inventory=snapshot?.sheet?.inventory??[],tabs=$('#inventory-tabs'),panel=$('#inventory');
   const held=tabs.contains(document.activeElement); // Keep keyboard focus on the strip when the 15-second refresh redraws it.
@@ -171,7 +222,7 @@ async function load(){
   const snapshot=await request('zones',null,'?view=companion'+(active?'&character_id='+encodeURIComponent(active):'')+'&bank_page='+page);
   apply(snapshot);
 }
-$('#character').addEventListener('change',()=>{active=$('#character').value;page=0;clearSheet();bank=null;snapshot=null;renderBank();$('#status').textContent='Loading character?';$('#bank-status').textContent='';void run(load);});
+$('#character').addEventListener('change',()=>{resetDescription();active=$('#character').value;page=0;clearSheet();bank=null;snapshot=null;renderBank();$('#status').textContent='Loading character?';$('#bank-status').textContent='';void run(load);});
 $('#inventory-tabs').addEventListener('keydown',event=>{ // Arrow keys cycle tabs the way the game's shoulder buttons do, wrapping at both ends.
   const step={ArrowLeft:-1,ArrowRight:1,Home:'first',End:'last'}[event.key];if(step===undefined)return;
   const index=groups.findIndex(group=>group.id===tab);
@@ -181,7 +232,7 @@ $('#inventory-tabs').addEventListener('keydown',event=>{ // Arrow keys cycle tab
 $('#reload').addEventListener('click',()=>{$('#bank-status').textContent='';void run(load);});
 $('#previous').addEventListener('click',()=>{page=Math.max(0,(bank?.page??0)-1);void run(load);});
 $('#next').addEventListener('click',()=>{page=(bank?.page??0)+1;void run(load);});
-window.addEventListener('pagehide',()=>{csrf='';snapshot=null;bank=null;clearSheet();renderBank();}); // Never retain a CSRF token or private character details after leaving the page.
+window.addEventListener('pagehide',()=>{resetDescription();csrf='';snapshot=null;bank=null;clearSheet();renderBank();}); // Never retain a CSRF token or private character details after leaving the page.
 window.addEventListener('online',()=>void run(load));
 void run(load);
 
