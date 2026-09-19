@@ -4,6 +4,25 @@ Little Log owns sign-in, display names and friendships. Quest retains its existi
 
 Deploy the tracker and auth service, then the standalone Quest service, then the rebuilt game. Existing grants retain currency access. New account features require renewed consent for `social:read social:write saves:read saves:write`. The shipped browser and native game use Little Log browser consent and device-code consent respectively, so neither requires a separate `lidollquest` OIDC registration in `clients.json`. A missing entry is normal for these flows. Only a separate direct OIDC integration needs the Quest identity registration; its default scope list includes the new scopes, while an explicit custom list must be updated. Other clients' defaults are unchanged; do not expand the `little-log` identity client's scopes.
 
+## Gamemaster rights
+
+`GET wallet` with `client_id=lidollquest` returns a boolean `gamemaster` beside the
+existing `blocked_accounts`. It is true when the grant's participant holds the
+`gamemaster` or `admin` role in `participant_access` and is not disabled. The
+LiDollQuest service reads it to admit its staff moderation panel and stores
+nothing about the decision; the flag is recomputed on every authenticated request,
+so changing or disabling a role takes effect immediately with no session to expire.
+
+`gamemaster` is deliberately narrow. It grants no access to records, charts,
+dataset export, social moderation or notifications, all of which remain `admin`.
+Administrators satisfy it implicitly so game moderation can be delegated without
+handing over the Little Log console. Assign it in Admin console > User management.
+Other `client_id` values never receive the field.
+
+Quest's per-app account identifier stays a one-way `sha256('lidollquest:' +
+participant)`; the quest service cannot resolve it back to a participant, so the
+role decision has to be made here rather than there.
+
 Both `/tracker/api/lidollcoin/browser/` and `/tracker/api/lidollcoin/v1/` expose:
 
 | Method and route | Scope | Parameters |

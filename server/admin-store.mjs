@@ -20,6 +20,10 @@ export function createAdminStore(db, records, growthChart,{onRecordWrite=()=>{}}
     const current=access(id);
     if(current.role!=='admin' || current.disabled) throw new ApiError(403,'Administrator access is required.');
   }
+  function isGamemaster(id) { // Game moderation only: it grants no access to records, charts, social moderation or notifications.
+    const current=access(id);
+    return !current.disabled && ['admin','gamemaster'].includes(current.role);
+  } // Administrators keep it implicitly so the role can be delegated without handing over the whole console.
   function audit(actor,action,target,details={}) { // Keep an attributable activity trail without copying private record content into logs.
     db.prepare('INSERT INTO admin_audit VALUES (?,?,?,?,?,?)').run(randomUUID(),actor,action,target,JSON.stringify(details),new Date().toISOString());
   }
@@ -80,7 +84,7 @@ export function createAdminStore(db, records, growthChart,{onRecordWrite=()=>{}}
       const current=access(input.id);
       if(input.version!==current.version) throw new ApiError(409,'This user changed. Refresh before updating.');
       if(input.action==='update') {
-        if(!['admin','participant'].includes(input.role) || typeof input.disabled!=='boolean') throw new ApiError(400,'Invalid role or access status.');
+        if(!['admin','gamemaster','participant'].includes(input.role) || typeof input.disabled!=='boolean') throw new ApiError(400,'Invalid role or access status.');
         if(current.role==='admin' && !current.disabled && (input.role!=='admin' || input.disabled) &&
           db.prepare("SELECT COUNT(*) AS n FROM participant_access WHERE role='admin' AND disabled=0").get().n<=1) throw new ApiError(409,'Keep at least one enabled administrator.');
         db.prepare('INSERT INTO participant_access VALUES (?,?,?,1) ON CONFLICT(participant_id) DO UPDATE SET role=excluded.role,disabled=excluded.disabled,version=version+1')
@@ -164,6 +168,6 @@ export function createAdminStore(db, records, growthChart,{onRecordWrite=()=>{}}
       db.exec('COMMIT'); return result.summary;
     } catch(error) { db.exec('ROLLBACK'); throw error; }
   }
-  return {access,requireAdmin,bootstrap,reminder,saveReminder,users,updateUser,dataset,charts,previewImport,importData,
+  return {access,requireAdmin,isGamemaster,bootstrap,reminder,saveReminder,users,updateUser,dataset,charts,previewImport,importData,
     auditList(actor) { requireAdmin(actor); return db.prepare('SELECT * FROM admin_audit ORDER BY created_at DESC,rowid DESC LIMIT 100').all(); }};
 }
