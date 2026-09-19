@@ -41,7 +41,7 @@ export async function coinApi(database,login,request,response,route) { // Bearer
     if(clientId==='lidollquest'&&request.method==='POST'&&route==='zones/action')return send(200,await questProxy(secret,route,null,input));
     if(clientId==='lidollquest'&&route==='social')return send(200,questSocialApi(database,secret,request.method,url.searchParams,input));
     if(clientId==='lidollquest'&&questRoutes.has(route)){requireQuestMethod(route,request.method);call('grant',secret,questScope(route,request.method));return send(200,await questProxy(secret,route,url.searchParams,input));}
-    if(request.method==='GET'&&route==='wallet')return send(200,call('balance',secret));
+    if(request.method==='GET'&&route==='wallet')return send(200,{...call('balance',secret),...(clientId==='lidollquest'?{blocked_accounts:database.questSocial.restrictions(identity.owner)}:{})}); // Refresh restrictions with each authenticated gameplay request.
     if(request.method==='POST'&&route==='operations'){requireRewardAuthority(clientId,secret,input,request.headers['x-reward-signature']);return send(200,call('operation',secret,input));}
     if(request.method==='POST'&&route==='revoke')return send(200,call('revoke',identity.owner,identity.id));
     return send(404,{error:'not_found',error_description:'Endpoint not found.'});

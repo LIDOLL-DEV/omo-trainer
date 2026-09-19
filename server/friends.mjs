@@ -5,6 +5,8 @@ const key=value=>{if(typeof value!=='string'||! /^[A-Za-z0-9_-]{1,80}$/.test(val
 export function createFriends(db,recordFromRow,{onRemove=()=>{},avatarInfo=()=>({}),presenceInfo=()=>({})}={}) {
  db.exec(`CREATE TABLE IF NOT EXISTS friendships(id TEXT PRIMARY KEY,a TEXT NOT NULL REFERENCES participants(id),b TEXT NOT NULL REFERENCES participants(id),requester TEXT NOT NULL REFERENCES participants(id),state TEXT NOT NULL CHECK(state IN ('pending','accepted')),created INTEGER NOT NULL,UNIQUE(a,b),CHECK(a<b));
  CREATE INDEX IF NOT EXISTS friends_b ON friendships(b);
+ CREATE TABLE IF NOT EXISTS friend_blocks(owner TEXT NOT NULL REFERENCES participants(id),target TEXT NOT NULL REFERENCES participants(id),created INTEGER NOT NULL,PRIMARY KEY(owner,target),CHECK(owner<>target));
+ CREATE INDEX IF NOT EXISTS friend_blocks_target ON friend_blocks(target);
  CREATE TABLE IF NOT EXISTS friend_record_shares(id TEXT PRIMARY KEY,friendship_id TEXT NOT NULL REFERENCES friendships(id) ON DELETE CASCADE,owner TEXT NOT NULL,recipient TEXT NOT NULL REFERENCES participants(id),record_id TEXT NOT NULL,created INTEGER NOT NULL,UNIQUE(owner,recipient,record_id),FOREIGN KEY(owner,record_id) REFERENCES entries(participant_id,id));
  CREATE INDEX IF NOT EXISTS shares_recipient ON friend_record_shares(recipient,created);
  CREATE TRIGGER IF NOT EXISTS revoke_deleted_friend_records AFTER UPDATE OF deleted_at ON entries WHEN NEW.deleted_at IS NOT NULL
@@ -12,7 +14,10 @@ export function createFriends(db,recordFromRow,{onRemove=()=>{},avatarInfo=()=>(
  const active=id=>Boolean(db.prepare('SELECT 1 FROM participants p WHERE p.id=? AND NOT EXISTS(SELECT 1 FROM participant_access a WHERE a.participant_id=p.id AND a.disabled=1)').get(id));
  const requireUser=id=>{if(!active(id))fail(403,'This account is not available.');};
  const pair=(a,b)=>db.prepare('SELECT * FROM friendships WHERE a=? AND b=?').get(...[a,b].sort());
- const accepted=(a,b)=>Boolean(a!==b&&active(a)&&active(b)&&pair(a,b)?.state==='accepted');
+ const blocked=(a,b)=>Boolean(db.prepare('SELECT 1 FROM friend_blocks WHERE (owner=? AND target=?) OR (owner=? AND target=?)').get(a,b,b,a)); // Either account can stop new contact.
+ const blocks=owner=>db.prepare('SELECT p.id AS participantId,p.label FROM friend_blocks b JOIN participants p ON p.id=b.target WHERE b.owner=? ORDER BY b.created DESC,p.id').all(owner); // Keep an unblock list even when the member is offline.
+ const restricted=owner=>db.prepare('SELECT CASE WHEN owner=? THEN target ELSE owner END AS participantId FROM friend_blocks WHERE owner=? OR target=?').all(owner,owner,owner).map(r=>r.participantId);
+ const accepted=(a,b)=>Boolean(a!==b&&active(a)&&active(b)&&!blocked(a,b)&&pair(a,b)?.state==='accepted');
  function transaction(work) {db.exec('BEGIN IMMEDIATE');try{const value=work();db.exec('COMMIT');return value;}catch(error){db.exec('ROLLBACK');throw error;}} // Relationship changes and access revocation commit together.
  function list(owner) {
   requireUser(owner);
@@ -25,14 +30,22 @@ export function createFriends(db,recordFromRow,{onRemove=()=>{},avatarInfo=()=>(
   const term=query.trim().replace(/[\\%_]/g,'\\$&');
   return db.prepare(`SELECT p.id AS participantId,p.label FROM participants p WHERE p.id<>? AND p.label LIKE ? ESCAPE '\\'
    AND NOT EXISTS(SELECT 1 FROM participant_access x WHERE x.participant_id=p.id AND x.disabled=1) ORDER BY p.label,p.id LIMIT 20`).all(owner,'%'+term+'%').map(row=>{
-    const link=pair(owner,row.participantId);return {...row,...avatarInfo(row.participantId),state:link?.state??'none',direction:link?.requester===owner?'outgoing':'incoming'};
+    const link=pair(owner,row.participantId);return {...row,...avatarInfo(row.participantId),state:blocked(owner,row.participantId)?'unavailable':link?.state??'none',direction:link?.requester===owner?'outgoing':'incoming'};
    });
  } // Signed-in name search is bounded and never returns account credentials, contact details or records.
  function act(owner,input) {
   requireUser(owner);if(!input||typeof input!=='object'||Array.isArray(input))fail(400,'Choose a friend action.');
   return transaction(()=>{
+   if(['block','unblock'].includes(input.action)) {
+    const other=key(input.participantId);if(other===owner||!db.prepare('SELECT 1 FROM participants WHERE id=?').get(other))fail(404,'Member not found.');
+    if(input.action==='unblock'){db.prepare('DELETE FROM friend_blocks WHERE owner=? AND target=?').run(owner,other);return {blocked:false};}
+    db.prepare('INSERT OR IGNORE INTO friend_blocks VALUES (?,?,?)').run(owner,other,Date.now());
+    const link=pair(owner,other);if(link){db.prepare('DELETE FROM friend_record_shares WHERE friendship_id=?').run(link.id);db.prepare('DELETE FROM friendships WHERE id=?').run(link.id);onRemove(owner,other);}
+    return {blocked:true}; // Blocking is idempotent and revokes friendship access in the same transaction.
+   }
    if(input.action==='request') {
     const other=key(input.participantId);if(other===owner||!active(other))fail(404,'Member not found.');
+    if(blocked(owner,other))fail(403,'Contact with this member is unavailable.');
     const existing=pair(owner,other);if(existing)return {id:existing.id,state:existing.state};
     for(const user of [owner,other])if(db.prepare('SELECT COUNT(*) AS n FROM friendships WHERE a=? OR b=?').get(user,user).n>=200)fail(409,'This friends list has reached its limit. Remove old requests before adding more.');
     const id=randomUUID();db.prepare("INSERT INTO friendships VALUES (?,?,?,?,'pending',?)").run(id,...[owner,other].sort(),owner,Date.now());return {id,state:'pending'};
@@ -42,6 +55,7 @@ export function createFriends(db,recordFromRow,{onRemove=()=>{},avatarInfo=()=>(
    if(!row)fail(404,'Friend request not found.');
    const other=row.a===owner?row.b:row.a;
    if(input.action==='accept') {
+    if(blocked(owner,other))fail(403,'Contact with this member is unavailable.');
     if(row.requester===owner||!active(other))fail(403,'Only the recipient can accept this request.');
     db.prepare("UPDATE friendships SET state='accepted' WHERE id=?").run(row.id);return {id:row.id,state:'accepted'};
    }
@@ -77,5 +91,5 @@ export function createFriends(db,recordFromRow,{onRemove=()=>{},avatarInfo=()=>(
   return {items:rows.slice(0,50).map(row=>({id:row.share_id,created:row.created,friend:{id:row.peer_id,label:row.label,...avatarInfo(row.peer_id)},record:recordFromRow(row)})),nextOffset:rows.length>50?offset+50:null};
  } // Recheck the friendship, both accounts and source deletion on each uncached read; recipients cannot edit shared records.
  function revokeRecord(owner,id){db.prepare('DELETE FROM friend_record_shares WHERE owner=? AND record_id=?').run(owner,id);} // Called in record deletion transactions so restoring a record cannot restore sharing.
- return {list,search,act,accepted,record,share,unshare,shared,revokeRecord};
+ return {list,search,act,accepted,blocked,blocks,restricted,record,share,unshare,shared,revokeRecord};
 }

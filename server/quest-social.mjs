@@ -10,10 +10,11 @@ export function createQuestSocial(db,friends,{presence=()=>({})}={}){
  function view(row){const {participantId,avatarVersion,...rest}=row;return {...rest,...member(participantId)};}
  function read(owner,query={}){
   const self=member(owner);
-  if(query.account_id){const target=resolve(query.account_id);return {member:member(target),friend:friends.list(owner).filter(f=>f.participantId===target).map(view)[0]??null,self:target===owner};}
+  if(query.account_id){const target=resolve(query.account_id);return {member:member(target),friend:friends.list(owner).filter(f=>f.participantId===target).map(view)[0]??null,self:target===owner,blocked:friends.blocks(owner).some(b=>b.participantId===target),restricted:friends.blocked(owner,target)};}
   const links=friends.list(owner),byMember=new Map(links.map(row=>[row.participantId,row]));
-  return {self,friends:(query.q?friends.search(owner,query.q).map(row=>({...row,...byMember.get(row.participantId)})):links).map(view)};
+  return {self,blocks:friends.blocks(owner).map(({participantId,label})=>({account_id:account(participantId),label})),friends:(query.q?friends.search(owner,query.q).map(row=>({...row,...byMember.get(row.participantId)})):links).map(view)};
  }
- function act(owner,input){member(owner);if(input?.action==='presence')return presence(owner,input);return friends.act(owner,input?.action==='request'?{action:'request',participantId:resolve(input.account_id)}:{action:input?.action,id:input?.id});}
- return {register,read,act};
+ function act(owner,input){member(owner);if(input?.action==='presence')return presence(owner,input);const accountAction=['request','block','unblock'].includes(input?.action);let target;if(accountAction)target=input.action==='unblock'?db.prepare('SELECT participant_id FROM quest_social_accounts WHERE account_id=?').get(input.account_id??'')?.participant_id:resolve(input.account_id);return friends.act(owner,accountAction?{action:input.action,participantId:target}:{action:input?.action,id:input?.id});}
+ const restrictions=owner=>[...new Set(friends.restricted(owner).map(account))]; // Gameplay sees opaque account restrictions, never tracker participant IDs.
+ return {register,read,act,restrictions};
 } // One relationship store serves both apps; Quest sees only its existing opaque account IDs.
