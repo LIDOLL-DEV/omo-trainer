@@ -108,14 +108,15 @@ export function createCoinApiStore(db,wallet,adjust,enabled,apps=coinApps(),now=
   }
   function connections(owner) {return db.prepare('SELECT id,client,scope,created_at AS createdAt,expires FROM coin_grants WHERE owner=? AND revoked=0 AND expires>? ORDER BY created_at DESC').all(owner,now()).map(value=>({...value,name:apps.find(a=>a.id===value.client)?.name??value.client}));}
   function revoke(owner,id) {if(db.prepare('SELECT 1 FROM coin_browser_grants b JOIN coin_grants g ON g.id=b.grant_id WHERE g.owner=? AND g.id=?').get(owner,id))db.prepare('DELETE FROM coin_browser_permissions WHERE owner=? AND client=?').run(owner,'lidollquest');db.prepare('UPDATE coin_grants SET revoked=1 WHERE owner=? AND id=?').run(owner,id);return {ok:true};}
-  function browserApproved(owner) {return Boolean(db.prepare('SELECT 1 FROM coin_browser_permissions WHERE owner=? AND client=? AND stars_allowed=1 AND quest_allowed=1').get(owner,'lidollquest'));}
+  if(!db.prepare('PRAGMA table_info(coin_browser_permissions)').all().some(c=>c.name==='diamonds_allowed'))db.exec('ALTER TABLE coin_browser_permissions ADD COLUMN diamonds_allowed INTEGER NOT NULL DEFAULT 0'); // Existing approvals must explicitly consent to diamond access.
+  function browserApproved(owner) {return Boolean(db.prepare('SELECT 1 FROM coin_browser_permissions WHERE owner=? AND client=? AND stars_allowed=1 AND quest_allowed=1 AND diamonds_allowed=1').get(owner,'lidollquest'));}
   function browserIssue(owner,previous) { // Reuse the same wallet ledger and receipts, but never expose this session secret to game code.
     if(!enabled(owner))fail(403,'Account access is disabled.');app('lidollquest');
     return atomic(()=>{const secret=randomBytes(32).toString('base64url'),id=randomUUID();
       if(typeof previous==='string')db.prepare('UPDATE coin_grants SET revoked=1 WHERE token_hash=? AND id IN (SELECT grant_id FROM coin_browser_grants)').run(hash(previous)); // Rotate only this browser session; other connected devices stay signed in.
-      db.prepare('INSERT INTO coin_grants VALUES (?,?,?,?,?,?,?,0)').run(id,hash(secret),owner,'lidollquest','wallet:read wallet:write stars:read stars:write social:read social:write saves:read saves:write',now(),now()+30*86400000);
+      db.prepare('INSERT INTO coin_grants VALUES (?,?,?,?,?,?,?,0)').run(id,hash(secret),owner,'lidollquest','wallet:read wallet:write stars:read stars:write diamonds:read diamonds:write social:read social:write saves:read saves:write',now(),now()+30*86400000);
       db.prepare('INSERT INTO coin_browser_grants VALUES (?)').run(id);
-      db.prepare('INSERT INTO coin_browser_permissions(owner,client,stars_allowed,quest_allowed) VALUES (?,?,1,1) ON CONFLICT(owner,client) DO UPDATE SET stars_allowed=1,quest_allowed=1').run(owner,'lidollquest');
+      db.prepare('INSERT INTO coin_browser_permissions(owner,client,stars_allowed,quest_allowed,diamonds_allowed) VALUES (?,?,1,1,1) ON CONFLICT(owner,client) DO UPDATE SET stars_allowed=1,quest_allowed=1,diamonds_allowed=1').run(owner,'lidollquest');
       return secret;
     });
   }

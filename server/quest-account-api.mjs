@@ -1,8 +1,8 @@
-export const questRoutes=new Set(['zones/inspect','cloud','cloud/action','characters/action']);
+export const questRoutes=new Set(['zones/inspect','cloud','cloud/action','characters/action','sprites','sprites/action','sprites/asset']);
 export function requireQuestMethod(route,method){
  if(method!==(route.endsWith('/action')?'POST':'GET'))throw Object.assign(Error('Method not allowed.'),{status:405});
 } // The route allowlist includes verbs; unsupported methods cannot become implicit reads in the proxy.
-export function questScope(route,method){return route.startsWith('cloud')||route.startsWith('characters')?(method==='GET'?'saves:read':'saves:write'):(method==='GET'?'social:read':'social:write');}
+export function questScope(route,method){return route.startsWith('cloud')||route.startsWith('characters')||route.startsWith('sprites')?(method==='GET'?'saves:read':'saves:write'):(method==='GET'?'social:read':'social:write');}
 export function questSocialApi(database,secret,method,query,input){
  if(!['GET','POST'].includes(method))throw Object.assign(Error('Method not allowed.'),{status:405});
  const identity=database.economy.coins('grant',secret,questScope('social',method));
