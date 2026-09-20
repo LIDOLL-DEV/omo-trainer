@@ -354,3 +354,7 @@ preserving more picture detail, but the browser upload no longer depends on it.
 ### Online monster scene delivery
 
 The shared quest proxy accepts up to 1 MiB for `zones` and `zones/action` responses so server-authored defeat scenes fit alongside inventories and maps. Other JSON responses retain the 256 KiB limit; managed artwork retains its existing 1,250,000-byte limit. This applies to both authenticated browser and Windows gateways; no new configuration is needed. Validate with `node --test tests/quest-scene-size.test.mjs tests/quest-world-assets.test.mjs`.
+
+### Online quest gateway
+
+Both game gateways forward authenticated `quests/detail` reads with character and quest IDs. NPC dialogue, objective progress and reward claims use the existing `zones/action` transport and its request receipts; the quest service owns all online quest state. Deploy this gateway update before publishing live NPC/quest content and distribute compatible browser/Windows clients. No new tracker credentials or environment settings are required.
