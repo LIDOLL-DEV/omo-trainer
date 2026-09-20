@@ -502,3 +502,5 @@ Companion validation: tests/companion.test.mjs checks static assets and consent/
 
 
 The companion supports Equip on carried gear and Unequip on worn gear. Curses, full bags, dresses and used-diaper disposal follow game rules. Commands use character revision plus an equipment-source token; stale selections, combat, pending needs turns and uploads are rejected before mutation. Online characters update their committed loadout without acquiring the game controller; an offline cloud edit publishes a new complete save revision. Unsynced local-only progress remains unavailable. Rolled stats and item identity survive swaps.
+
+MommyBot character ownership: `node --test tests/quest-account-link.test.mjs tests/coin-api.test.mjs` verifies pairwise IDs, own-account translation, permission/client checks, revocation, and unchanged wallet behavior. The game checkout adds `test/mommybot-tracker.test.mjs`, which exercises the real tracker, bot wallet client and character showcase with fake Discord delivery.

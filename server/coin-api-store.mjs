@@ -106,6 +106,12 @@ export function createCoinApiStore(db,wallet,adjust,enabled,apps=coinApps(),now=
     if(!['wallet:read','stars:read','diamonds:read'].some(scope=>scopes.includes(scope)))fail(403,'This connection lacks read permission.','insufficient_scope');
     return {account_id:hash(value.client+':'+value.owner),scope:value.scope,quest_features:value.client==='lidollquest',...(scopes.includes('wallet:read')?{currency:'LiDollCoin',balance:funds.coins}:{}),...(scopes.includes('stars:read')?{stars:funds.stars,stars_enabled:scopes.includes('stars:write')}:{}),...(scopes.includes('diamonds:read')?{diamonds:funds.diamonds,diamonds_enabled:scopes.includes('diamonds:write'),diamond_coin_value:50}:{})}; // Existing grants gain no additional scopes until the participant consents.
   }
+  function questAccount(secret) {
+    const value=grant(secret,'wallet:read');
+    if(value.client!=='lidollbot')fail(403,'This account lookup is reserved for MommyBot.','insufficient_scope');
+    app('lidollquest');
+    return {account_id:hash('lidollquest:'+value.owner),wallet_account_id:hash(value.client+':'+value.owner),client_id:'lidollquest'};
+  } // Translate only the authenticated bot user's account; never accept another owner or expose the tracker identity.
   function connections(owner) {return db.prepare('SELECT id,client,scope,created_at AS createdAt,expires FROM coin_grants WHERE owner=? AND revoked=0 AND expires>? ORDER BY created_at DESC').all(owner,now()).map(value=>({...value,name:apps.find(a=>a.id===value.client)?.name??value.client}));}
   function revoke(owner,id) {if(db.prepare('SELECT 1 FROM coin_browser_grants b JOIN coin_grants g ON g.id=b.grant_id WHERE g.owner=? AND g.id=?').get(owner,id))db.prepare('DELETE FROM coin_browser_permissions WHERE owner=? AND client=?').run(owner,'lidollquest');db.prepare('UPDATE coin_grants SET revoked=1 WHERE owner=? AND id=?').run(owner,id);return {ok:true};}
   if(!db.prepare('PRAGMA table_info(coin_browser_permissions)').all().some(c=>c.name==='diamonds_allowed'))db.exec('ALTER TABLE coin_browser_permissions ADD COLUMN diamonds_allowed INTEGER NOT NULL DEFAULT 0'); // Existing approvals must explicitly consent to diamond access.
@@ -158,5 +164,5 @@ export function createCoinApiStore(db,wallet,adjust,enabled,apps=coinApps(),now=
     });
   }
   function revokeOwner(owner){return atomic(()=>{db.prepare('UPDATE coin_grants SET revoked=1 WHERE owner=?').run(owner);db.prepare('DELETE FROM coin_devices WHERE owner=?').run(owner);db.prepare('DELETE FROM coin_browser_permissions WHERE owner=?').run(owner);});}
-  return {revokeOwner,app,begin,inspect,approve,token,exchange,grant,balance,connections,revoke,operation,browserApproved,browserIssue,browserSession};
+  return {revokeOwner,app,begin,inspect,approve,token,exchange,grant,balance,questAccount,connections,revoke,operation,browserApproved,browserIssue,browserSession};
 }

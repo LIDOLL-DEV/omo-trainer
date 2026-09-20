@@ -37,6 +37,10 @@ export async function coinApi(database,login,request,response,route) { // Bearer
     const identity=call('grant',secret);
     await login.checkIdentity?.(identity.owner);call('grant',secret);
     if(identity.client!==clientId)throw Object.assign(Error('Token belongs to another app.'),{status:403});
+    if(route==='quest-account'){
+      if(request.method!=='GET')return send(405,{error:'method_not_allowed'});
+      return send(200,call('questAccount',secret));
+    } // Resolve the existing game owner for a consented bot wallet without changing either app's account ID.
     if(clientId==='lidollquest'&&request.method==='GET'&&route==='zones')return send(200,await questProxy(secret,route,url.searchParams));
     if(clientId==='lidollquest'&&request.method==='POST'&&route==='zones/action')return send(200,await questProxy(secret,route,null,input));
     if(clientId==='lidollquest'&&route==='social')return send(200,questSocialApi(database,secret,request.method,url.searchParams,input));

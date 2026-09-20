@@ -20,7 +20,7 @@ Register other apps or browser origins using the server environment variable **L
 
 Native apps need no browser origin or shared app secret. Browser apps must use an exact registered HTTPS origin (the Little Log origin itself is also accepted). Null/wildcard origins are rejected. Omit the variable for the native LiDollQuest default. The earning limit is per app, account and UTC day, across all tokens; changing tokens does not reset it. Existing receipts remain valid if retried after a limit or configuration change.
 
-All external routes require **?client_id=lidollquest**. Requests and responses are JSON; device/token requests also accept application/x-www-form-urlencoded. Responses use Cache-Control: no-store. External routes use Bearer authentication, never the Little Log session cookie. User approval uses a separate same-origin session and CSRF-protected UI at **/tracker/coins/**.
+All external routes require their registered **client_id**, such as **?client_id=lidollquest** or **?client_id=lidollbot**. Requests and responses are JSON; device/token requests also accept application/x-www-form-urlencoded. Responses use Cache-Control: no-store. External routes use Bearer authentication, never the Little Log session cookie. User approval uses a separate same-origin session and CSRF-protected UI at **/tracker/coins/**.
 
 ## Connect an account
 
@@ -133,6 +133,33 @@ GET **wallet?client_id=lidollquest** with **Authorization: Bearer ACCESS_TOKEN**
 ~~~
 
 Balance is an integer from 0 to 2,147,483,647. account_id identifies the linked player within this app; bind pending operations to it and do not replay them after linking a different account. The response does not include names, scientific records or sticker data. With `stars:read`, it also includes `stars` (integer balance) and `stars_enabled` (whether this grant also has `stars:write`).
+
+## MommyBot character account link
+
+Account IDs are intentionally app-specific: `SHA-256(client_id + ":" + tracker_owner)`.
+The same player has different IDs for `lidollbot` and `lidollquest`; never change a
+wallet's saved ID or reuse the bot ID as a game character owner.
+
+`GET quest-account?client_id=lidollbot` with the bot user's existing bearer grant
+and `wallet:read` returns:
+
+```json
+{"account_id":"GAME_SCOPED_ID","wallet_account_id":"BOT_SCOPED_ID","client_id":"lidollquest"}
+```
+
+Only the registered `lidollbot` app can use this bridge. It resolves the grant's
+own participant; no supplied owner, character, issuer or subject can select
+another account. `lidollquest` must also be registered. Normal identity checks,
+revocation, expiry and account disablement apply. This read spends no currency,
+exposes no tracker identity and never grants gameplay or wallet access to the game.
+MommyBot verifies `wallet_account_id` against its saved connection, then uses
+`account_id` with the game server's existing protected character endpoint.
+
+Deploy Little Log first, then MommyBot. Existing grants and characters work
+without relinking or a database backfill. An expired grant still needs renewal.
+The game server needs its existing character/portrait endpoint and matching
+`MOMMYBOT_ONLINE_TOKEN`; this bridge requires no game client rebuild.
+Test with `node --test tests/quest-account-link.test.mjs tests/coin-api.test.mjs`.
 
 ## Earn and spend
 
