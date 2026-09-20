@@ -349,3 +349,8 @@ Camera-photo uploads now resize originals up to 100 MB on the device. A post
 rejected with HTTP 413 automatically retries with compressed pictures below
 the existing 256 KiB proxy limit. The larger Nginx allowance remains useful for
 preserving more picture detail, but the browser upload no longer depends on it.
+
+
+### Online monster scene delivery
+
+The shared quest proxy accepts up to 1 MiB for `zones` and `zones/action` responses so server-authored defeat scenes fit alongside inventories and maps. Other JSON responses retain the 256 KiB limit; managed artwork retains its existing 1,250,000-byte limit. This applies to both authenticated browser and Windows gateways; no new configuration is needed. Validate with `node --test tests/quest-scene-size.test.mjs tests/quest-world-assets.test.mjs`.
