@@ -1,4 +1,4 @@
-export const questRoutes=new Set(['zones/inspect','cloud','cloud/action','characters/action','sprites','sprites/action','sprites/asset']);
+export const questRoutes=new Set(['zones/inspect','cloud','cloud/action','characters/action','sprites','sprites/action','sprites/asset','content/asset']);
 export function requireQuestMethod(route,method){
  if(method!==(route.endsWith('/action')?'POST':'GET'))throw Object.assign(Error('Method not allowed.'),{status:405});
 } // The route allowlist includes verbs; unsupported methods cannot become implicit reads in the proxy.
