@@ -1,4 +1,3 @@
-import {drawCharacter} from './paperdoll.js';
 const $=selector=>document.querySelector(selector);
 let csrf='',characters=[],active='',bank=null,page=0,busy=false,snapshot=null;
 let descriptionDraft=null; // Keep the target and description version fixed while polling refreshes the rest of the character.
@@ -50,7 +49,7 @@ async function run(work){ // One request at a time, so a sale and a page change 
   }finally{busy=false;controls();}
 }
 function clearSheet(){
-  for(const id of ['sheet','equipment','inventory','inventory-tabs','paperdoll','tush-status','tush-art'])$('#'+id).replaceChildren();
+  for(const id of ['sheet','equipment','inventory','inventory-tabs','tush-status'])$('#'+id).replaceChildren();
   $('#freshness').textContent='';$('#inventory-summary').textContent='';
   $('#description').textContent='';$('#description-panel').hidden=!descriptionDraft;
 } // Clear every character panel together, including private details after unlinking or a failed selection.
@@ -74,7 +73,6 @@ function renderSheet(){
   const tush=sheet.tush;$('#tush-status').append(text('strong',tush.name),text('p',tush.status));
   if(tush.is_diaper){const meter=document.createElement('progress');meter.max=tush.capacity;meter.value=tush.wet_absorbed+tush.mess_absorbed;meter.setAttribute('aria-label','Absorption used');$('#tush-status').append(meter,text('p',tush.wet_absorbed+' wet + '+tush.mess_absorbed+' messy / '+tush.capacity+' capacity','field-help'));}
   if(tush.item_id)$('#tush-status').append(text('p','Bulk: '+tush.bulk,'field-help'));
-  void drawCharacter(sheet,$('#paperdoll'),$('#tush-art'));
 } // Every displayed field comes from the same selected-character snapshot; inventory entries keep their individual rolled stats.
 function resetDescription(){
   descriptionDraft=null;$('#description-input').value='';$('#description-form').hidden=true;$('#description-edit').hidden=false;$('#description-status').textContent='';$('#description-panel').hidden=true;

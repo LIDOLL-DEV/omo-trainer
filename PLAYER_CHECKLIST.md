@@ -227,7 +227,7 @@ Use **Notifications** in the top bar to open your Social notification history.
 - Use Edit profile picture on your own profile to open its Settings controls.
 
 
-Companion: check current/manual character selection, equipment, inventory, paperdoll, Tush Status and stats; bank paging and sales must keep the selected character. Check each item tab lists only its own category, that a bottle shows under Drinks, that a quest key shows only under All, and that the chosen tab survives a refresh. No-data characters clear old details; unlinking clears all private panels.
+Companion: check current/manual character selection, equipment, inventory, Tush Status text/meter and stats (no paperdoll or tush artwork may appear anywhere); bank paging and sales must keep the selected character. Check each item tab lists only its own category, that a bottle shows under Drinks, that a quest key shows only under All, and that the chosen tab survives a refresh. No-data characters clear old details; unlinking clears all private panels.
 
 
 The companion supports Equip on carried gear and Unequip on worn gear. Curses, full bags, dresses and used-diaper disposal follow game rules. Commands use character revision plus an equipment-source token; stale selections, combat, pending needs turns and uploads are rejected before mutation. Online characters update their committed loadout without acquiring the game controller; an offline cloud edit publishes a new complete save revision. Unsynced local-only progress remains unavailable. Rolled stats and item identity survive swaps.

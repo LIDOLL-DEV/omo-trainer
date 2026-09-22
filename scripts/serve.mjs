@@ -23,7 +23,6 @@ const api = createApi(database, login);
 const games = createGamesRoute(base);
 const stickerAssets = stickerCatalog();
 const stickerPaths = new Map(stickerAssets.map(item => [item.url, item.path]));
-const companionArt=JSON.parse(readFileSync(new URL('../companion/art.json',import.meta.url),'utf8')); // Generated public artwork only; no character snapshots are static assets.
 const files = new Map([
   ['admin/ai-analysis.js','text/javascript; charset=utf-8'],
   ['admin/statistics.js','text/javascript; charset=utf-8'],
@@ -42,8 +41,6 @@ const files = new Map([
   ...stickerAssets.map(item => [item.url, item.mime]),
   ['coins/browser.js','text/javascript; charset=utf-8'],
   ['coins/index.html','text/html; charset=utf-8'], ['coins/app.js','text/javascript; charset=utf-8'], ['coins/style.css','text/css; charset=utf-8'],
-  ['companion/art.json','application/json'], ['companion/paperdoll.js','text/javascript; charset=utf-8'],
-  ...Object.values(companionArt.sprites).filter(a=>/^assets\/[A-Za-z0-9_]+\.png$/.test(a.src)).map(a=>['companion/'+a.src,'image/png']),
   ['companion/index.html','text/html; charset=utf-8'], ['companion/app.js','text/javascript; charset=utf-8'], ['companion/style.css','text/css; charset=utf-8'],
   ['lib/prediction.js', 'text/javascript; charset=utf-8'], ['lib/prediction-view.js', 'text/javascript; charset=utf-8'],
   ['lib/reward-celebration.js', 'text/javascript; charset=utf-8'],

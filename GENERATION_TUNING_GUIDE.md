@@ -82,4 +82,4 @@ Report output now permits 256–50,000 tokens and defaults to 50,000. Migration 
 Nightly reports are exported to MommyBot after completion. Manual prompt-tuning runs remain private unless the administrator uses **Run and share with MommyBot** to queue an explicitly shared on-demand report.
 
 
-Companion artwork and item metadata are exported from LiDollQuest with python/export_companion_assets.py in the game checkout. Refresh those assets after editing Items or TQ sprites; no tracker record or game world generation changes are involved.
+The companion no longer ships any LiDollQuest artwork (the art assets are disallowed outside the game), so do not export or copy TQ sprites into the tracker. Editing Items or TQ sprites needs no tracker refresh.

@@ -1,7 +1,7 @@
 # Little Log
 
-The LiDollQuest companion lets players edit a public character description beneath
-their paperdoll. Edits are free, allow paragraphs and 2,000 characters, and remain
+The LiDollQuest companion lets players edit a public character description on their
+character card (the companion shows no game artwork: no paperdoll and no tush art). Edits are free, allow paragraphs and 2,000 characters, and remain
 saved per character. Refreshes preserve drafts; conflicting device edits are shown
 for review. Deploy with the quest service's `description` action support. The game
 client update displays descriptions in inspection and captured RP paperdoll previews.

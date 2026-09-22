@@ -26,10 +26,16 @@ test('the companion is served from the tracker origin with its own assets', asyn
   const html = await page.text();
   assert.match(html, /LidollQuest-Companion/);
   assert.doesNotMatch(html, /<iframe/i);
-  for (const asset of ['companion/app.js', 'companion/style.css', 'companion/paperdoll.js', 'companion/art.json', 'companion/assets/TQ_Base_3.png']) {
+  for (const asset of ['companion/app.js', 'companion/style.css']) {
     const response = await fetch(`${origin}/tracker/${asset}`);
     assert.equal(response.status, 200, `${asset} must be served`);
   }
+  for (const asset of ['companion/paperdoll.js', 'companion/art.json', 'companion/assets/TQ_Base_3.png']) { // Game artwork is disallowed: it is neither shipped nor served.
+    const response = await fetch(`${origin}/tracker/${asset}`);
+    assert.notEqual(response.status, 200, `${asset} must not be served`);
+  }
+  assert.doesNotMatch(read('companion/app.js'), /paperdoll|art\.json|drawCharacter|drawTush/); // The companion never renders character artwork.
+  assert.doesNotMatch(read('companion/index.html'), /id="paperdoll"|id="tush-art"/);
 });
 
 test('the companion calls the gateway same-origin and never carries a bot origin or a token', () => {
