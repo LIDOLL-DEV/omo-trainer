@@ -115,3 +115,11 @@ Deploy the matching quest service first, then Little Log. The companion ships no
 
 
 The companion supports Equip on carried gear and Unequip on worn gear. Curses, full bags, dresses and used-diaper disposal follow game rules. Commands use character revision plus an equipment-source token; stale selections, combat, pending needs turns and uploads are rejected before mutation. Online characters update their committed loadout without acquiring the game controller; an offline cloud edit publishes a new complete save revision. Unsynced local-only progress remains unavailable. Rolled stats and item identity survive swaps.
+
+## Diaper Atelier and Clothes Emporium
+
+The companion's shops card replaces the retired MommyBot `/diapers` and `/clothes` gacha. Each roll costs LiDollCoins from the player's own LiDollQuest wallet grant, through the same durable debit the hub merchants use. The rolled item goes to the **selected character's bank** with a resale right capped at the price paid, so it can be sold straight away (bank Sell, or Sell on the reveal) or worn (**Wear now** withdraws it and equips it; bank rows also offer **Withdraw**). The Atelier rolls diapers and pull-ups; the Emporium rolls every other generated garment, diaper covers included.
+
+Everything is server-side in LiDollQuest (`server/companion-shops.mjs`, actions `companion_roll` and `companion_withdraw`). The tracker gateway only forwards them, so Little Log needs no new route or secret. The roll is fixed when the purchase is reserved, and the page keeps one request ID until the server answers definitively, so a dropped connection shows **Retry roll** and never charges twice. The page sends the price it showed, and the server refuses the roll if the price has since changed. Prices, odds and item-level bands are tuned in the LiDollQuest `/gm` Loot tab (see its guide). The card stays hidden until the quest service advertises `companionShops`, so deploy LiDollQuest first.
+
+With `PUPPETEER_MODULE` and `CHROME_PATH` set, `node tests/companion-shops-browser.mjs` drives the whole flow against a stubbed gateway and saves screenshots.

@@ -90,3 +90,12 @@ test('the gateway still refuses a cross-origin companion request', async () => {
     assert.equal(response.status, 403, `cross-origin companion reads must stay refused (${JSON.stringify(headers)})`);
   }
 });
+
+test('the Diaper Atelier and Clothes Emporium roll through the same gateway and retry one request', () => {
+  const app = read('companion/app.js');
+  assert.match(app, /action:'companion_roll'/);
+  assert.match(app, /action:'companion_withdraw'/);
+  assert.match(app, /price:shop\.price/); // The player confirms the shown price; the server refuses a roll once it has changed.
+  assert.match(app, /if\(error\.status&&error\.status<500&&error\.status!==429\)pendingRoll=null/); // Only a definite refusal forgets the request; a lost reply retries the same roll.
+  assert.match(read('companion/index.html'), /id="shops-card"[^>]*hidden/); // Hidden until a server advertising the shops answers.
+});

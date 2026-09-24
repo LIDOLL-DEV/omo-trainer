@@ -1,5 +1,6 @@
 const $=selector=>document.querySelector(selector);
 let csrf='',characters=[],active='',bank=null,page=0,busy=false,snapshot=null;
+let pendingRoll=null; // {character,shop,body}: one roll's request, kept until the server answers definitively so a dropped connection retries that roll instead of paying for a second.
 let descriptionDraft=null; // Keep the target and description version fixed while polling refreshes the rest of the character.
 const gateway='../api/lidollcoin/browser/'; // Same-origin gateway: the wallet cookie is Path-scoped to it and never leaves the tracker.
 const coins=value=>Number(value).toLocaleString();
@@ -17,6 +18,10 @@ const groups=[ // The game's four battle tabs (inv_battle_overlay_groups) plus A
 ]; // inv_item_matches_group(), rule for rule.
 const shortLabels={weapon:'Weapon',food:'Food',drink:'Drink',quest_item:'Key',torso:'Torso',dress:'Dress',pants:'Pants',skirt:'Skirt',panties:'Panties',diaper_cover:'Cover',
  socks:'Socks',shoes:'Shoes',head:'Head',mouth:'Mouth',bra:'Bra',corset:'Corset',gloves:'Gloves',plug:'Plug',accessory:'Accessory',special:'Special'}; // inv_category_short_label()
+const statLabels={atk:'ATK',def:'DEF',bulk:'Bulk',bulk_threshold:'Bulk threshold',childish:'Childish',wet_resist:'Wet resist',tum_resist:'Tum resist',hp_regen:'HP regen',
+ atk_mod:'ATK mod',def_mod:'DEF mod',dex_mod:'DEX mod',int_mod:'INT mod',cha_mod:'CHA mod',hp_max_mod:'Max HP',shame_delta:'Shame'}; // Stat lines a rolled item can carry (companion-shops.mjs VIEW_STATS).
+const shopBlurbs={atelier:'Diapers and pull-ups, each a random style and cut.',emporium:'Dresses, tops, legwear, underwear, shoes, socks, gloves and diaper covers.'};
+const capital=value=>String(value).charAt(0).toUpperCase()+String(value).slice(1);
 let tab=(()=>{try{return sessionStorage.getItem('lidoll.companion.tab')??'all';}catch{return 'all';}})(); // A remembered tab survives the 15-second refresh and a reload; it holds no private detail.
 
 async function request(route,input,query='') { // Every companion read and sale is an authenticated same-origin call; no token is ever exposed to this page.
@@ -27,13 +32,13 @@ async function request(route,input,query='') { // Every companion read and sale 
 }
 function unlinked(message){ // A missing or revoked wallet connection is an invitation to link, never an error message.
   resetDescription();
-  characters=[];bank=null;snapshot=null;active='';page=0;csrf='';clearSheet();$('#bank').replaceChildren();$('#wallet').textContent='';$('#content').hidden=true;$('#link').hidden=false;$('#status').textContent=message;
+  characters=[];bank=null;snapshot=null;active='';page=0;csrf='';pendingRoll=null;clearSheet();$('#bank').replaceChildren();$('#wallet').textContent='';$('#content').hidden=true;$('#link').hidden=false;$('#status').textContent=message;
 }
 function controls(){
   for(const id of ['character','reload','previous','next'])$('#'+id).disabled=busy;
   $('#previous').hidden=!bank||bank.page<=0;
   $('#next').hidden=!bank||bank.page>=bank.pages-1;
-  document.querySelectorAll('#bank button, button[data-equipment]').forEach(button=>{button.disabled=busy||button.dataset.locked==='true';});
+  document.querySelectorAll('#bank button, button[data-equipment], #shops button, #shop-result button').forEach(button=>{button.disabled=busy||button.dataset.locked==='true';});
   $('#description-edit').disabled=busy;
   $('#description-save').disabled=busy||!snapshot?.character||Array.from($('#description-input').value).length>2000;
   $('#description-input').disabled=busy||Boolean(descriptionDraft?.pending);
@@ -49,7 +54,8 @@ async function run(work){ // One request at a time, so a sale and a page change 
   }finally{busy=false;controls();}
 }
 function clearSheet(){
-  for(const id of ['sheet','equipment','inventory','inventory-tabs','tush-status'])$('#'+id).replaceChildren();
+  for(const id of ['sheet','equipment','inventory','inventory-tabs','tush-status','shops','shop-result'])$('#'+id).replaceChildren();
+  $('#shops-card').hidden=true;$('#shop-result').hidden=true;
   $('#freshness').textContent='';$('#inventory-summary').textContent='';
   $('#description').textContent='';$('#description-panel').hidden=!descriptionDraft;
 } // Clear every character panel together, including private details after unlinking or a failed selection.
@@ -171,8 +177,9 @@ function renderBank(){
     const name=document.createElement('td');name.className='wrap';name.textContent=item.name??item.item_id??'Unknown item';row.append(name);
     const price=document.createElement('td');price.textContent=item.online_sell_price>0?coins(item.online_sell_price)+' LiDollCoins':'Not sellable';row.append(price);
     const action=document.createElement('td');
+    if(snapshot?.capabilities?.companionWithdraw&&snapshot.sheet?.available)action.append(withdrawButton(entry.id,item.item_id,'Withdraw',false));
     if(item.online_sell_price>0&&item.online_item)action.append(sellButton(entry,item));
-    else action.append(text('span','—','field-help')); // Untracked loot and quest items carry no sale right; the server is still the authority.
+    else if(!action.childNodes.length)action.append(text('span','—','field-help')); // Untracked loot and quest items carry no sale right; the server is still the authority.
     row.append(action);body.append(row);
   }
   table.append(body);host.append(table);
@@ -196,6 +203,82 @@ function equipmentButton(label,action,slot,itemId,locked){
  }));
  return button;
 } // Revision and source tokens prevent an old inventory row from selecting a different item after a game action.
+function renderShops(){ // Diaper Atelier and Clothes Emporium: rolls go to the selected character's bank.
+  const shops=snapshot?.shops,host=$('#shops');host.replaceChildren();
+  $('#shops-card').hidden=!shops||!snapshot.character;
+  if($('#shops-card').hidden)return renderReveal();
+  $('#shops-summary').textContent='Rolls go straight to '+snapshot.character.name+'’s bank · '+coins(shops.bankFree)+' free slot'+(shops.bankFree===1?'':'s')+'. Sell them here, or wear them now or in LiDollQuest.';
+  const mine=pendingRoll?.character===snapshot.character.id?pendingRoll:null;
+  for(const shop of shops.shops){
+    const panel=text('section',undefined,'companion-shop'),odds=text('ul',undefined,'companion-odds'),retry=mine?.shop===shop.id;
+    odds.setAttribute('aria-label',shop.name+' odds');
+    for(const row of shop.odds)if(row.chance>0){const dot=text('span',undefined,'companion-rarity-dot');dot.style.background=row.colour;const item=text('li');item.append(dot,text('span',capital(row.rarity)+' '+row.chance+'%'));odds.append(item);}
+    const button=text('button',retry?'Retry roll':'Roll for '+coins(shop.price)+' LiDollCoin'+(shop.price===1?'':'s'),'button primary');button.type='button';
+    const reason=!shop.available?'Nothing to roll here right now.':shops.bankFree<1?'This bank is full. Sell or withdraw something first.':mine&&!retry?'Finish your other roll first.':shops.pending&&!retry?'A purchase is still settling. Refresh in a moment.':'';
+    button.dataset.locked=String(Boolean(reason));button.disabled=busy||Boolean(reason);button.title=reason;
+    button.addEventListener('click',()=>void rollShop(shop));
+    panel.append(text('h3',shop.name),text('p',shopBlurbs[shop.id]??'','field-help'),odds,button);
+    host.append(panel);
+  }
+  renderReveal();
+}
+function rollShop(shop){
+  return run(async()=>{
+    const character=snapshot.character;
+    if(!(pendingRoll?.character===character.id&&pendingRoll.shop===shop.id))
+      pendingRoll={character:character.id,shop:shop.id,body:{action:'companion_roll',character_id:character.id,revision:character.revision,controller:controller(),request_id:crypto.randomUUID(),shop:shop.id,price:shop.price}};
+    $('#shop-status').textContent='Rolling…';
+    try{
+      const result=await request('zones/action',pendingRoll.body);
+      pendingRoll=null;apply(result);
+      const last=snapshot.shops?.last;
+      $('#shop-status').textContent=last?.status==='delivered'?'You got '+last.item.name+'!':last?.status==='declined'?'Not enough LiDollCoins. Nothing was rolled.':'Your payment is still settling. Refresh in a moment; you will not be charged twice.';
+    }catch(error){
+      if(error.status&&error.status<500&&error.status!==429)pendingRoll=null; // A definite refusal charged nothing; uncertain failures keep the same request for Retry.
+      if([401,403].includes(error.status))throw error;
+      $('#shop-status').textContent=pendingRoll?'Connection interrupted. Press Retry roll to finish the same roll; you will not be charged twice.':error.message;
+      if(error.code==='price_changed')await load(); // Show the new price before the player confirms again.
+      else renderShops();
+    }
+  });
+} // The price sent is the one shown; the server refuses a roll if it has changed since.
+function renderReveal(){ // The last roll, tinted by its rarity, with the actions still possible for it.
+  const host=$('#shop-result'),last=snapshot?.shops?.last,item=last?.status==='delivered'?last.item:null;
+  host.replaceChildren();host.hidden=!item;
+  if(!item)return;
+  host.style.setProperty('--rarity',item.colour);
+  host.append(text('p',(snapshot.shops.shops.find(shop=>shop.id===last.shop)?.name??'Shop')+' · last roll','companion-reveal-label'),text('h3',item.name,'companion-reveal-name'),
+    text('p',capital(item.rarity)+(item.ilvl?' · Item level '+item.ilvl:'')+' · '+(shortLabels[item.category]??'Item'),'field-help'));
+  const stats=Object.entries(item.stats??{});
+  if(stats.length){const list=text('ul',undefined,'companion-reveal-stats');for(const [key,value] of stats)list.append(text('li',(statLabels[key]??key)+' '+(value>0?'+':'')+value));host.append(list);}
+  if(item.desc)host.append(text('p',item.desc,'companion-reveal-desc'));
+  const actions=text('div',undefined,'notification-actions');
+  if(last.in_bank){
+    if(snapshot.capabilities?.companionWithdraw&&snapshot.sheet?.available)actions.append(withdrawButton(last.bank_item,item.item_id,'Wear now',true));
+    if(item.sell>0&&last.item_instance)actions.append(sellButton({id:last.bank_item},{name:item.name,online_item:last.item_instance,online_sell_price:item.sell}));
+  }else actions.append(text('p','No longer in the bank.','field-help'));
+  host.append(actions);
+}
+function withdrawButton(bankItem,itemId,label,wear){ // Bank to bag from anywhere; "Wear now" equips the withdrawn copy straight after.
+  const button=text('button',label,'button small '+(wear?'primary':'secondary'));button.type='button';button.dataset.equipment='true';
+  button.dataset.locked=String(!snapshot.sheet?.equipmentEditable);button.disabled=busy||button.dataset.locked==='true';
+  button.title=snapshot.sheet?.equipmentEditable?(wear?'Move to your bag and wear it':'Move to your bag'):'Finish combat or the current game action first.';
+  button.addEventListener('click',()=>void run(async()=>{
+    const character=snapshot.character;
+    const result=await request('zones/action',{action:'companion_withdraw',character_id:character.id,revision:character.revision,controller:controller(),request_id:crypto.randomUUID(),bank_item:bankItem,equipment_version:snapshot.sheet.equipment_version});
+    apply(result);
+    const carried=(snapshot.sheet?.inventory??[]).filter(row=>row.item_id===itemId).at(-1); // A withdrawn single joins the end of the bag.
+    if(!wear||!carried?.equippable){$('#status').textContent='Moved to your bag.';return;}
+    try{
+      apply(await request('zones/action',{action:'companion_equip',character_id:snapshot.character.id,revision:snapshot.character.revision,controller:controller(),request_id:crypto.randomUUID(),slot:carried.index,item_id:carried.item_id,equipment_version:snapshot.sheet.equipment_version}));
+      $('#status').textContent='Now wearing '+carried.name+'.';
+    }catch(error){
+      if([401,403].includes(error.status))throw error;
+      $('#status').textContent='Moved to your bag, but it could not be worn: '+error.message;
+    }
+  }));
+  return button;
+}
 function controller(){ // A stable per-tab controller id keeps the arena's single-window rules satisfied without claiming a zone.
   try{let value=sessionStorage.getItem('lidoll.companion.controller');if(!value){value=crypto.randomUUID();sessionStorage.setItem('lidoll.companion.controller',value);}return value;}
   catch{return 'companion';}
@@ -211,7 +294,7 @@ function apply(value){
   bank=snapshot.bank;if(bank)page=bank.page;
   $('#content').hidden=!characters.length;$('#link').hidden=true;
   $('#status').textContent=characters.length?'':'This account has no LiDollQuest characters yet. Start one in the game and come back.';
-  renderBank();renderSheet();
+  renderBank();renderSheet();renderShops();
 }
 async function load(){
   const session=await request('session');
@@ -220,7 +303,7 @@ async function load(){
   const snapshot=await request('zones',null,'?view=companion'+(active?'&character_id='+encodeURIComponent(active):'')+'&bank_page='+page);
   apply(snapshot);
 }
-$('#character').addEventListener('change',()=>{resetDescription();active=$('#character').value;page=0;clearSheet();bank=null;snapshot=null;renderBank();$('#status').textContent='Loading character?';$('#bank-status').textContent='';void run(load);});
+$('#character').addEventListener('change',()=>{resetDescription();active=$('#character').value;page=0;clearSheet();bank=null;snapshot=null;renderBank();$('#status').textContent='Loading character?';$('#bank-status').textContent='';$('#shop-status').textContent='';void run(load);});
 $('#inventory-tabs').addEventListener('keydown',event=>{ // Arrow keys cycle tabs the way the game's shoulder buttons do, wrapping at both ends.
   const step={ArrowLeft:-1,ArrowRight:1,Home:'first',End:'last'}[event.key];if(step===undefined)return;
   const index=groups.findIndex(group=>group.id===tab);

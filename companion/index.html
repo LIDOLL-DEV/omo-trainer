@@ -1,6 +1,6 @@
 <!doctype html><html lang="en" data-theme="little-tracker"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fff5fa"><title>LidollQuest-Companion · Little Log</title><script src="../theme-init.js"></script><link rel="stylesheet" href="../styles.css"><link rel="stylesheet" href="../themes.css"><link rel="stylesheet" href="../coins/style.css"><link rel="stylesheet" href="./style.css"></head><body class="companion-page"><main>
 <a class="companion-back" href="../#games">Back to Games</a><h1>LidollQuest-Companion</h1>
-<p class="section-copy">Your adventurer’s outfit, supplies, stats and bank, together in one place.</p><p id="status" role="status">Checking your connection…</p>
+<p class="section-copy">Your adventurer’s outfit, supplies, stats and bank, plus the Diaper Atelier and Clothes Emporium, together in one place.</p><p id="status" role="status">Checking your connection…</p>
 <section id="link" class="card" hidden><h2>Connect LiDollQuest</h2><p>Connect to see your characters and their latest synced game state.</p><a id="link-start" class="button primary" href="../api/lidollcoin/browser/connect?view=companion">Connect LiDollQuest</a></section>
 <section id="content" hidden>
  <section class="card"><div class="companion-bank-heading"><h2>Character</h2><button id="reload" class="button secondary" type="button">Refresh</button></div>
@@ -19,6 +19,10 @@
  <section class="card"><h2>Inventory</h2><p id="inventory-summary" class="field-help"></p>
   <div id="inventory-tabs" class="companion-tabs" role="tablist" aria-label="Item categories"></div>
   <div id="inventory" class="table-scroll" role="tabpanel" tabindex="0"></div></section>
+ <section id="shops-card" class="card" hidden aria-labelledby="shops-heading"><h2 id="shops-heading">Diaper Atelier &amp; Clothes Emporium</h2>
+  <p id="shops-summary" class="field-help"></p><div id="shops" class="companion-shops"></div>
+  <p id="shop-status" class="field-help" role="status"></p><section id="shop-result" class="companion-reveal" hidden aria-label="Your last roll"></section>
+ </section>
  <section class="card"><h2>Bank</h2><p id="bank-summary" class="field-help"></p><p id="bank-status" class="field-help" role="status"></p><div id="bank" class="table-scroll"></div>
   <div class="notification-actions"><button id="previous" class="button secondary" type="button" hidden>Previous page</button><button id="next" class="button secondary" type="button" hidden>Next page</button></div>
  </section>

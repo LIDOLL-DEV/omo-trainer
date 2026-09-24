@@ -28,3 +28,17 @@
 .companion-tab-count{font-weight:600;font-size:.72rem;opacity:.75;font-variant-numeric:tabular-nums;}
 .companion-page #inventory:focus-visible{outline:2px solid var(--pink);outline-offset:2px;border-radius:.5rem;}
 @media(max-width:38rem){.companion-overview{grid-template-columns:1fr;}.companion-page main{padding-inline:.75rem;}}
+/* Diaper Atelier and Clothes Emporium: two shop panels and the last roll's reveal, tinted by its rarity colour. */
+.companion-shops{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.75rem;margin:.5rem 0;}
+.companion-shop{display:flex;flex-direction:column;gap:.5rem;padding:.75rem .9rem;border:1px solid var(--border);border-radius:.75rem;background:var(--panel);}
+.companion-shop h3,.companion-shop p{margin:0;}
+.companion-shop .button{margin-top:auto;align-self:flex-start;}
+.companion-odds{display:flex;flex-wrap:wrap;gap:.25rem .75rem;margin:0;padding:0;list-style:none;font-size:.8rem;font-variant-numeric:tabular-nums;}
+.companion-odds li{display:inline-flex;align-items:center;gap:.3rem;}
+.companion-rarity-dot{width:.7rem;height:.7rem;border-radius:50%;border:1px solid var(--border);flex:none;}
+.companion-reveal{margin-top:.75rem;padding:.75rem .9rem;border:1px solid var(--border);border-left:.4rem solid var(--rarity,var(--pink));border-radius:.75rem;background:var(--panel);}
+.companion-reveal>*{margin:0 0 .4rem;}
+.companion-reveal-label{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;opacity:.7;}
+.companion-reveal-name{font-size:1.15rem;overflow-wrap:anywhere;}
+.companion-reveal-stats{display:flex;flex-wrap:wrap;gap:.25rem .9rem;padding:0;list-style:none;font-variant-numeric:tabular-nums;}
+.companion-reveal-desc{font-size:.9rem;opacity:.85;}
