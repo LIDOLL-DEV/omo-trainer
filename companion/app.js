@@ -209,32 +209,47 @@ function renderShops(){ // Diaper Atelier and Clothes Emporium: rolls go to the 
   if($('#shops-card').hidden)return renderReveal();
   $('#shops-summary').textContent='Rolls go straight to '+snapshot.character.name+'’s bank · '+coins(shops.bankFree)+' free slot'+(shops.bankFree===1?'':'s')+'. Sell them here, or wear them now or in LiDollQuest.';
   const mine=pendingRoll?.character===snapshot.character.id?pendingRoll:null;
+  const oddsList=(label,rows)=>{ // One rarity-dot line per tier that can actually drop.
+    const odds=text('ul',undefined,'companion-odds');odds.setAttribute('aria-label',label);
+    for(const row of rows)if(row.chance>0){const dot=text('span',undefined,'companion-rarity-dot');dot.style.background=row.colour;const item=text('li');item.append(dot,text('span',capital(row.rarity)+' '+row.chance+'%'));odds.append(item);}
+    return odds;
+  };
   for(const shop of shops.shops){
-    const panel=text('section',undefined,'companion-shop'),odds=text('ul',undefined,'companion-odds'),retry=mine?.shop===shop.id;
-    odds.setAttribute('aria-label',shop.name+' odds');
-    for(const row of shop.odds)if(row.chance>0){const dot=text('span',undefined,'companion-rarity-dot');dot.style.background=row.colour;const item=text('li');item.append(dot,text('span',capital(row.rarity)+' '+row.chance+'%'));odds.append(item);}
-    const button=text('button',retry?'Retry roll':'Roll for '+coins(shop.price)+' LiDollCoin'+(shop.price===1?'':'s'),'button primary');button.type='button';
+    const panel=text('section',undefined,'companion-shop'),retry=mine?.shop===shop.id,retryMode=retry?(mine.mode??'coins'):''; // Only the roll that was interrupted offers Retry.
     const reason=!shop.available?'Nothing to roll here right now.':shops.bankFree<1?'This bank is full. Sell or withdraw something first.':mine&&!retry?'Finish your other roll first.':shops.pending&&!retry?'A purchase is still settling. Refresh in a moment.':'';
-    button.dataset.locked=String(Boolean(reason));button.disabled=busy||Boolean(reason);button.title=reason;
-    button.addEventListener('click',()=>void rollShop(shop));
-    panel.append(text('h3',shop.name),text('p',shopBlurbs[shop.id]??'','field-help'),odds,button);
+    const rollButton=(label,mode)=>{ // Shared lock state for the coin and diamond buttons; a pending roll only unlocks its own Retry.
+      const button=text('button',label,mode==='diamond'?'button':'button primary');button.type='button';
+      const lock=reason||(retry&&retryMode!==mode?'Finish your other roll first.':'');
+      button.dataset.locked=String(Boolean(lock));button.disabled=busy||Boolean(lock);button.title=lock;button.dataset.mode=mode;
+      button.addEventListener('click',()=>void rollShop(shop,mode));
+      return button;
+    };
+    panel.append(text('h3',shop.name),text('p',shopBlurbs[shop.id]??'','field-help'),oddsList(shop.name+' odds',shop.odds),
+      rollButton(retryMode==='coins'?'Retry roll':'Roll for '+coins(shop.price)+' LiDollCoin'+(shop.price===1?'':'s'),'coins'));
+    if(shop.diamond&&snapshot.capabilities?.companionDiamondRolls){ // The premium mode: exactly one diamond, never below the server's rarity floor.
+      const block=text('div',undefined,'companion-diamond');
+      block.append(text('p','Diamond roll · never below '+capital(shop.diamond.floor),'field-help'),oddsList(shop.name+' diamond odds',shop.diamond.odds),
+        rollButton(retryMode==='diamond'?'Retry diamond roll':'Roll for '+coins(shop.diamond.price)+' diamond'+(shop.diamond.price===1?'':'s'),'diamond'));
+      panel.append(block);
+    }
     host.append(panel);
   }
   renderReveal();
 }
-function rollShop(shop){
+function rollShop(shop,mode='coins'){ // `mode`: 'coins' (the shop price) or 'diamond' (exactly one diamond, rarity floor).
   return run(async()=>{
     const character=snapshot.character;
-    if(!(pendingRoll?.character===character.id&&pendingRoll.shop===shop.id))
-      pendingRoll={character:character.id,shop:shop.id,body:{action:'companion_roll',character_id:character.id,revision:character.revision,controller:controller(),request_id:crypto.randomUUID(),shop:shop.id,price:shop.price}};
+    if(!(pendingRoll?.character===character.id&&pendingRoll.shop===shop.id&&(pendingRoll.mode??'coins')===mode))
+      pendingRoll={character:character.id,shop:shop.id,mode,body:{action:'companion_roll',character_id:character.id,revision:character.revision,controller:controller(),request_id:crypto.randomUUID(),shop:shop.id,mode,price:mode==='diamond'?shop.diamond.price:shop.price}};
     $('#shop-status').textContent='Rolling…';
     try{
       const result=await request('zones/action',pendingRoll.body);
       pendingRoll=null;apply(result);
       const last=snapshot.shops?.last;
-      $('#shop-status').textContent=last?.status==='delivered'?'You got '+last.item.name+'!':last?.status==='declined'?'Not enough LiDollCoins. Nothing was rolled.':'Your payment is still settling. Refresh in a moment; you will not be charged twice.';
+      $('#shop-status').textContent=last?.status==='delivered'?'You got '+last.item.name+'!':last?.status==='declined'?(last.currency==='diamonds'?'Not enough diamonds. Nothing was rolled.':'Not enough LiDollCoins. Nothing was rolled.'):'Your payment is still settling. Refresh in a moment; you will not be charged twice.';
     }catch(error){
       if(error.status&&error.status<500&&error.status!==429)pendingRoll=null; // A definite refusal charged nothing; uncertain failures keep the same request for Retry.
+      if(error.code==='insufficient_scope'){$('#shop-status').textContent='This connection has not approved diamond spending. Reconnect the tracker to LiDollQuest and allow diamonds, then roll again.';renderShops();return;} // Consent, not a broken link: keep the page linked.
       if([401,403].includes(error.status))throw error;
       $('#shop-status').textContent=pendingRoll?'Connection interrupted. Press Retry roll to finish the same roll; you will not be charged twice.':error.message;
       if(error.code==='price_changed')await load(); // Show the new price before the player confirms again.
@@ -247,7 +262,7 @@ function renderReveal(){ // The last roll, tinted by its rarity, with the action
   host.replaceChildren();host.hidden=!item;
   if(!item)return;
   host.style.setProperty('--rarity',item.colour);
-  host.append(text('p',(snapshot.shops.shops.find(shop=>shop.id===last.shop)?.name??'Shop')+' · last roll','companion-reveal-label'),text('h3',item.name,'companion-reveal-name'),
+  host.append(text('p',(snapshot.shops.shops.find(shop=>shop.id===last.shop)?.name??'Shop')+' · last roll'+(last.currency==='diamonds'?' · 1 diamond':''),'companion-reveal-label'),text('h3',item.name,'companion-reveal-name'),
     text('p',capital(item.rarity)+(item.ilvl?' · Item level '+item.ilvl:'')+' · '+(shortLabels[item.category]??'Item'),'field-help'));
   const stats=Object.entries(item.stats??{});
   if(stats.length){const list=text('ul',undefined,'companion-reveal-stats');for(const [key,value] of stats)list.append(text('li',(statLabels[key]??key)+' '+(value>0?'+':'')+value));host.append(list);}

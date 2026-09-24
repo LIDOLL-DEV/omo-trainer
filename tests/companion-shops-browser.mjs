@@ -13,11 +13,12 @@ const origin='http://127.0.0.1:'+server.address().port+'/tracker/';let browser;c
 const odds=[['common',60,'#ffffff'],['uncommon',25,'#4fd06b'],['rare',10,'#4f9cff'],['epic',4,'#b45fff'],['legendary',1,'#ff9f1c']].map(([rarity,chance,colour])=>({rarity,chance,colour}));
 const game={revision:5,version:'v1',price:3,bank:[],inventory:[],equipped:'',last:null,sold:[],rolls:new Map(),dropNextRoll:true};
 const rolled=n=>({item_id:'gen_cottage_pull_up',name:'Crinkly Cottage Pull-Up of Whispers '+n,category:'panties',is_diaper:true,online_item:'token-'+n,online_sell_price:3,loot:{rarity:'rare',ilvl:12}});
-const view=()=>({coins:120,dailyRemaining:250,dailyCap:250,capabilities:{companionShops:true,companionWithdraw:true},
+const diamondOdds=odds.map(o=>['common','uncommon'].includes(o.rarity)?{...o,chance:0}:{...o,chance:o.rarity==='rare'?66.67:o.rarity==='epic'?26.67:6.66}); // Floored at rare.
+const view=()=>({coins:120,dailyRemaining:9999,dailyCap:9999,capabilities:{companionShops:true,companionWithdraw:true,companionDiamondRolls:true},
  characters:[{id:'char-1',name:'Shop Tester',revision:game.revision}],character:{id:'char-1',name:'Shop Tester',revision:game.revision},
  bank:{page:0,pages:1,count:game.bank.length,capacity:512,items:game.bank},
  shops:{bankFree:512-game.bank.length,pending:false,last:game.last&&{...game.last,in_bank:game.bank.some(e=>e.id===game.last.bank_item)},
-  shops:[{id:'atelier',name:'Diaper Atelier',price:game.price,available:true,odds},{id:'emporium',name:'Clothes Emporium',price:game.price,available:true,odds}]},
+  shops:[{id:'atelier',name:'Diaper Atelier',price:game.price,available:true,odds,diamond:{price:1,floor:'rare',odds:diamondOdds}},{id:'emporium',name:'Clothes Emporium',price:game.price,available:true,odds,diamond:{price:1,floor:'rare',odds:diamondOdds}}]},
  sheet:{available:true,online:false,source:'online',equipmentEditable:true,equipment_version:game.version,name:'Shop Tester',level:12,class_id:'fighter',player_info:{},
   equipment:[{slot:'panties',item_id:game.equipped,name:game.equipped?'Cottage Pull-Up':'(empty)'}],
   inventory:game.inventory.map((item,index)=>({index,item_id:item.item_id,name:item.name,category:item.category,equippable:true})),
@@ -27,9 +28,10 @@ function act(input){
  if(input.revision!==game.revision&&!(input.action==='companion_roll'&&game.rolls.has(input.request_id)))return conflict('stale','Character changed; refresh before choosing another action.');
  if(input.action==='companion_roll'){
   if(game.rolls.has(input.request_id))return {status:200,body:view()}; // A replay returns the committed receipt.
-  if(input.price!==game.price)return conflict('price_changed','The price changed to '+game.price+' LiDollCoins. Review it and roll again.');
+  const cost=input.mode==='diamond'?1:game.price; // The diamond mode is always exactly one diamond.
+  if(input.price!==cost)return conflict('price_changed',input.mode==='diamond'?'A diamond roll costs exactly 1 diamond. Review it and roll again.':'The price changed to '+game.price+' LiDollCoins. Review it and roll again.');
   const n=game.rolls.size+1,entry={id:'bank-'+n,item:rolled(n)};game.rolls.set(input.request_id,entry);game.bank.push(entry);game.revision++;
-  game.last={id:'p'+n,shop:input.shop,status:'delivered',price:game.price,bank_item:entry.id,item_instance:entry.item.online_item,
+  game.last={id:'p'+n,shop:input.shop,status:'delivered',price:cost,mode:input.mode??'coins',currency:input.mode==='diamond'?'diamonds':'coins',bank_item:entry.id,item_instance:entry.item.online_item,
    item:{item_id:entry.item.item_id,name:entry.item.name,category:'panties',rarity:'rare',colour:'#4f9cff',ilvl:12,desc:'Cottage pull-up. Tiny flowers on soft cotton.',is_diaper:true,stats:{wet_resist:-3,bulk:1,cha_mod:3},value:35,sell:3}};
   if(game.dropNextRoll){game.dropNextRoll=false;return {status:503,body:{}};} // Committed on the server, but the reply is lost.
   return {status:200,body:view()};

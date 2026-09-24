@@ -122,4 +122,11 @@ The companion's shops card replaces the retired MommyBot `/diapers` and `/clothe
 
 Everything is server-side in LiDollQuest (`server/companion-shops.mjs`, actions `companion_roll` and `companion_withdraw`). The tracker gateway only forwards them, so Little Log needs no new route or secret. The roll is fixed when the purchase is reserved, and the page keeps one request ID until the server answers definitively, so a dropped connection shows **Retry roll** and never charges twice. The page sends the price it showed, and the server refuses the roll if the price has since changed. Prices, odds and item-level bands are tuned in the LiDollQuest `/gm` Loot tab (see its guide). The card stays hidden until the quest service advertises `companionShops`, so deploy LiDollQuest first.
 
+**Diamond rolls (2026-09-24).** Under each shop's coin button sits **Roll for 1 diamond**. It costs
+exactly one diamond (the wallet's diamond debit only ever moves one), never lands below the rarity
+floor LiDollQuest's gamemaster sets (`diamond_roll_floor`, rare by default), and the reveal says
+"1 diamond" and resells for half its value. It needs the `diamonds:write` consent the LiDollQuest
+connection already carries; without it the page explains how to reconnect rather than treating the
+link as broken. "Not enough diamonds. Nothing was rolled." means exactly that: no debit, no item.
+
 With `PUPPETEER_MODULE` and `CHROME_PATH` set, `node tests/companion-shops-browser.mjs` drives the whole flow against a stubbed gateway and saves screenshots.

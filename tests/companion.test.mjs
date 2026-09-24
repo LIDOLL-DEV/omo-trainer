@@ -95,7 +95,10 @@ test('the Diaper Atelier and Clothes Emporium roll through the same gateway and 
   const app = read('companion/app.js');
   assert.match(app, /action:'companion_roll'/);
   assert.match(app, /action:'companion_withdraw'/);
-  assert.match(app, /price:shop\.price/); // The player confirms the shown price; the server refuses a roll once it has changed.
+  assert.match(app, /price:mode==='diamond'\?shop\.diamond\.price:shop\.price/); // The player confirms the shown price; the server refuses a roll once it has changed.
+  assert.match(app, /mode,price:/); // Diamond rolls send mode:'diamond' with the one-diamond price.
+  assert.match(app, /companionDiamondRolls/); // The diamond block only renders when the server advertises it.
+  assert.match(app, /Not enough diamonds\. Nothing was rolled\./);
   assert.match(app, /if\(error\.status&&error\.status<500&&error\.status!==429\)pendingRoll=null/); // Only a definite refusal forgets the request; a lost reply retries the same roll.
   assert.match(read('companion/index.html'), /id="shops-card"[^>]*hidden/); // Hidden until a server advertising the shops answers.
 });
