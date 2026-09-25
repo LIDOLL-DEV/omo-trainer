@@ -1,5 +1,5 @@
 import {requireRewardAuthority} from './reward-authority.mjs';
-import {questProxy} from './quest-proxy.mjs';
+import {questProxy,knownOnly} from './quest-proxy.mjs';
 import {verifyWalletIdentity} from './coin-identity.mjs';
 import {questRoutes,questScope,questSocialApi,requireQuestMethod} from './quest-account-api.mjs';
 export async function coinApi(database,login,request,response,route) { // Bearer-only external routes have explicit per-app CORS and never use browser session cookies.
@@ -42,7 +42,7 @@ export async function coinApi(database,login,request,response,route) { // Bearer
       return send(200,call('questAccount',secret));
     } // Resolve the existing game owner for a consented bot wallet without changing either app's account ID.
     if(clientId==='lidollquest'&&request.method==='GET'&&route==='zones')return send(200,await questProxy(secret,route,url.searchParams));
-    if(clientId==='lidollquest'&&request.method==='POST'&&route==='zones/action')return send(200,await questProxy(secret,route,null,input));
+    if(clientId==='lidollquest'&&request.method==='POST'&&route==='zones/action')return send(200,await questProxy(secret,route,knownOnly(url.searchParams),input)); // known: snapshot-cache hint for the quest service.
     if(clientId==='lidollquest'&&route==='social')return send(200,questSocialApi(database,secret,request.method,url.searchParams,input));
     if(clientId==='lidollquest'&&questRoutes.has(route)){requireQuestMethod(route,request.method);call('grant',secret,questScope(route,request.method));return send(200,await questProxy(secret,route,url.searchParams,input));}
     if(request.method==='GET'&&route==='wallet')return send(200,{...call('balance',secret),...(clientId==='lidollquest'?{blocked_accounts:database.questSocial.restrictions(identity.owner),gamemaster:database.admin.isGamemaster(identity.owner)}:{})}); // Refresh restrictions and game-moderation rights with each authenticated gameplay request.

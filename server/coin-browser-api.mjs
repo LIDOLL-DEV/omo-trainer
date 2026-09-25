@@ -1,5 +1,5 @@
 import {requireRewardAuthority} from './reward-authority.mjs';
-import {questProxy} from './quest-proxy.mjs';
+import {questProxy,knownOnly} from './quest-proxy.mjs';
 import {questRoutes,questScope,questSocialApi,requireQuestMethod} from './quest-account-api.mjs';
 ﻿import {cookie} from './login.mjs';
 const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -64,7 +64,7 @@ export async function coinBrowserApi(database,login,request,response,route) { //
     if(route==='social')return send(200,questSocialApi(database,secret,request.method,new URL(request.url,login.origin).searchParams,input));
     if(questRoutes.has(route)){requireQuestMethod(route,request.method);call('grant',secret,questScope(route,request.method));return send(200,await questProxy(secret,route,new URL(request.url,login.origin).searchParams,input));}
     if(route==='zones'&&request.method==='GET')return send(200,await questProxy(secret,route,new URL(request.url,login.origin).searchParams));
-    if(route==='zones/action'&&request.method==='POST')return send(200,await questProxy(secret,route,null,input));
+    if(route==='zones/action'&&request.method==='POST')return send(200,await questProxy(secret,route,knownOnly(new URL(request.url,login.origin).searchParams),input)); // known: snapshot-cache hint for the quest service.
     if(route==='operations'&&request.method==='POST'){requireRewardAuthority('lidollquest',secret,input,request.headers['x-reward-signature']);return send(200,call('operation',secret,input));}
     if(route==='revoke'&&request.method==='POST') {
       const identity=call('grant',secret);call('revoke',identity.owner,identity.id);
