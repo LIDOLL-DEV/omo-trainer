@@ -44,3 +44,20 @@
 .companion-reveal-name{font-size:1.15rem;overflow-wrap:anywhere;}
 .companion-reveal-stats{display:flex;flex-wrap:wrap;gap:.25rem .9rem;padding:0;list-style:none;font-variant-numeric:tabular-nums;}
 .companion-reveal-desc{font-size:.9rem;opacity:.85;}
+
+/* ── Guild card (2026-09-28) ── */
+.companion-guild-tag{font-weight:600;padding:.15rem .6rem;border-radius:.6rem;border:2px solid var(--crest,transparent);background:rgba(0,0,0,.04)}
+.companion-guild-tag-input{text-transform:uppercase}
+.companion-guild-list{list-style:none;padding:0;margin:0 0 .75rem}
+.companion-guild-list li{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;padding:.35rem 0}
+.companion-guild-forms{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr))}
+.companion-guild-chat{list-style:none;margin:0 0 .5rem;padding:.5rem;max-height:14rem;overflow-y:auto;border:1px solid rgba(0,0,0,.08);border-radius:.5rem;font-size:.95rem}
+.companion-guild-chat li{padding:.15rem 0;overflow-wrap:anywhere}
+.companion-guild-emote{font-style:italic;opacity:.85}
+.companion-online{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;background:#b8b0b8;margin-right:.4rem;vertical-align:middle}
+.companion-online.is-online{background:#3cba54}
+.companion-sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+#guild-chat-form,#guild-donate-form,#guild-invite-form{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+#guild-chat-input{flex:1 1 12rem}
+#guild-donate-amount{width:7rem}
+#guild-goal-meter{width:100%;max-width:28rem}

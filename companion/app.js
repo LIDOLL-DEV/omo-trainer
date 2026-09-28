@@ -32,13 +32,14 @@ async function request(route,input,query='') { // Every companion read and sale 
 }
 function unlinked(message){ // A missing or revoked wallet connection is an invitation to link, never an error message.
   resetDescription();
-  characters=[];bank=null;snapshot=null;active='';page=0;csrf='';pendingRoll=null;clearSheet();$('#bank').replaceChildren();$('#wallet').textContent='';$('#content').hidden=true;$('#link').hidden=false;$('#status').textContent=message;
+  characters=[];bank=null;snapshot=null;active='';page=0;csrf='';pendingRoll=null;guildDraft={motd:false,chat:'',invite:''};clearSheet();$('#bank').replaceChildren();$('#wallet').textContent='';$('#content').hidden=true;$('#link').hidden=false;$('#status').textContent=message;
 }
 function controls(){
   for(const id of ['character','reload','previous','next'])$('#'+id).disabled=busy;
   $('#previous').hidden=!bank||bank.page<=0;
   $('#next').hidden=!bank||bank.page>=bank.pages-1;
   document.querySelectorAll('#bank button, button[data-equipment], #shops button, #shop-result button').forEach(button=>{button.disabled=busy||button.dataset.locked==='true';});
+  document.querySelectorAll('[data-guild]').forEach(node=>{node.disabled=busy||node.dataset.locked==='true';}); // Guild buttons, inputs and the crest picker.
   $('#description-edit').disabled=busy;
   $('#description-save').disabled=busy||!snapshot?.character||Array.from($('#description-input').value).length>2000;
   $('#description-input').disabled=busy||Boolean(descriptionDraft?.pending);
@@ -55,7 +56,7 @@ async function run(work){ // One request at a time, so a sale and a page change 
 }
 function clearSheet(){
   for(const id of ['sheet','equipment','inventory','inventory-tabs','tush-status','shops','shop-result'])$('#'+id).replaceChildren();
-  $('#shops-card').hidden=true;$('#shop-result').hidden=true;
+  $('#shops-card').hidden=true;$('#shop-result').hidden=true;$('#guild-card').hidden=true;
   $('#freshness').textContent='';$('#inventory-summary').textContent='';
   $('#description').textContent='';$('#description-panel').hidden=!descriptionDraft;
 } // Clear every character panel together, including private details after unlinking or a failed selection.
@@ -309,7 +310,7 @@ function apply(value){
   bank=snapshot.bank;if(bank)page=bank.page;
   $('#content').hidden=!characters.length;$('#link').hidden=true;
   $('#status').textContent=characters.length?'':'This account has no LiDollQuest characters yet. Start one in the game and come back.';
-  renderBank();renderSheet();renderShops();
+  renderBank();renderSheet();renderShops();renderGuild();
 }
 async function load(){
   const session=await request('session');
@@ -336,3 +337,116 @@ setInterval(()=>{if(!document.hidden&&!$('#content').hidden)void run(load);},150
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)void run(load);});
 
 window.addEventListener('pageshow',event=>{if(event.persisted)void run(load);}); // Restore a fresh private view after browser back/forward cache navigation.
+
+// ── Guild card (2026-09-28): roster, MOTD, chat, treasury, weekly goal and the officer tools. Every read rides the companion snapshot (guild*, guildChat); every write is a guild_* zones/action with companion:true. ──
+let guildDraft={motd:false,chat:'',invite:''}; // Kept across the 15-second refresh so a half-typed line never vanishes.
+const rankLabel={leader:'Leader',officer:'Officer',member:'Member'};
+function guildBody(action,extra){return {action,character_id:snapshot.character.id,revision:snapshot.character.revision,controller:controller(),request_id:crypto.randomUUID(),companion:true,...extra};} // companion:true asks the game for the slim companion view back instead of a full zone snapshot.
+function guildAct(action,extra,done){
+  return run(async()=>{
+    try{const result=await request('zones/action',guildBody(action,extra));apply(result);$('#guild-status').textContent=typeof done==='function'?done(result):(done??'');}
+    catch(error){
+      if([401,403].includes(error.status))throw error; // A lost connection is handled by run().
+      $('#guild-status').textContent=error.message;
+      if(error.status===409&&/refresh/i.test(error.message))await load(); // Stale revision: reload so the next click carries the current one.
+    }
+  });
+} // Guild errors stay on the guild card instead of clearing the whole character sheet.
+function guildButton(label,action,extra,done,className='button small secondary'){const button=text('button',label,className);button.type='button';button.dataset.guild='true';button.disabled=busy;button.addEventListener('click',()=>void guildAct(action,extra,done));return button;}
+function renderGuild(){
+  const card=$('#guild-card'),g=snapshot?.guild,rules=snapshot?.guildRules??{},support=snapshot?.guildSupport===true&&Boolean(snapshot?.character);
+  card.hidden=!support;if(!support)return;
+  const rank=g?.rank??'',officer=rank==='officer'||rank==='leader',leader=rank==='leader';
+  $('#guild-tag').hidden=!g;if(g){$('#guild-tag').textContent='['+g.tag+'] '+g.name;$('#guild-tag').style.setProperty('--crest',/^#[0-9a-f]{6}$/i.test(g.crest)?g.crest:'transparent');}
+  $('#guild-join').hidden=Boolean(g);$('#guild-home').hidden=!g;
+  renderGuildBoard();
+  if(!g){
+    $('#guild-join-help').textContent='Found a guild for '+coins(rules.fee??0)+' LiDollCoins, or apply to one by name or tag. Guilds share a chat channel, a [TAG] beside every member’s name, a treasury and a weekly goal.';
+    const invites=$('#guild-invites');invites.replaceChildren();
+    for(const inv of snapshot.guildInvitations??[]){const li=text('li');li.append(text('span','['+inv.tag+'] '+inv.name+' invited you (from '+inv.sender+')'),guildButton('Join','guild_accept',{invitation:inv.id},'You joined ['+inv.tag+'] '+inv.name+'.','button small primary'),guildButton('Decline','guild_decline',{invitation:inv.id},'Invitation declined.'));invites.append(li);}
+    const apps=$('#guild-my-apps');apps.replaceChildren();
+    for(const app of snapshot.guildApplications??[]){const li=text('li');li.append(text('span','Applied to ['+app.tag+'] '+app.name),guildButton('Withdraw','guild_withdraw',{application:app.id},'Application withdrawn.'));apps.append(li);}
+    return;
+  }
+  if(g.status==='pending'){$('#guild-summary').textContent='Your charter fee is still settling. Refresh in a moment; you will not be charged twice.';return;}
+  $('#guild-summary').textContent=(rankLabel[rank]??rank)+' · '+g.members.length+' of '+g.memberCap+' members · '+g.members.filter(m=>m.online).length+' online'+(g.open?' · applications open':' · applications closed');
+  $('#guild-motd').textContent=g.motd||'No message of the day yet.'; // Plain text only: player-authored markup is never interpreted.
+  $('#guild-motd-edit').hidden=!officer||guildDraft.motd;$('#guild-motd-form').hidden=!guildDraft.motd;
+  $('#guild-motd-input').maxLength=g.upgrades?.motdLength??240;
+  const goal=g.goal??{};$('#guild-goal-meter').max=Math.max(1,goal.target??1);$('#guild-goal-meter').value=Math.min(goal.points??0,goal.target??1);
+  $('#guild-goal-text').textContent=(goal.points??0)+' of '+(goal.target??0)+' points this week ('+(goal.dives??0)+' Dive bosses, '+(goal.quests??0)+' quests, '+(goal.accidents??0)+' accidents) · '+coins(goal.reward??0)+' LiDollCoins to every member account when met · resets '+(goal.endsAt?new Date(goal.endsAt).toLocaleString():'Monday')+(goal.lastWeek?' · last week '+(goal.lastWeek.met?'met':'missed')+' at '+goal.lastWeek.points+'/'+goal.lastWeek.target:'');
+  renderGuildRoster(g,rank);renderGuildChat();renderGuildTreasury(g,leader,rules);
+  $('#guild-manage').hidden=!officer;if(officer)renderGuildApplications(g,leader);
+  const stuck=leader&&g.members.length>1;$('#guild-leave').hidden=stuck;$('#guild-leave').title=stuck?'Transfer leadership first.':''; // The leader hands over before leaving; alone, leaving disbands.
+  $('#guild-disband').hidden=!leader;
+}
+function renderGuildRoster(g,rank){
+  const host=$('#guild-roster');host.replaceChildren();const table=document.createElement('table'),head=document.createElement('thead'),hr=document.createElement('tr'),body=document.createElement('tbody');
+  for(const title of ['Member','Rank','Status','Donated','']){const th=text('th',title);th.scope='col';hr.append(th);}head.append(hr);table.append(head,body);
+  for(const m of g.members){
+    const row=document.createElement('tr'),name=text('td',undefined,'wrap'),dot=text('span',undefined,'companion-online'+(m.online?' is-online':''));dot.setAttribute('aria-hidden','true');name.append(dot,text('span',m.name));
+    row.append(name,text('td',rankLabel[m.rank]??m.rank),text('td',m.online?'Online'+(m.zone?' · '+m.zone:''):'Offline'),text('td',coins(m.donated??0)));
+    const actions=text('td'),mine=m.id===snapshot.character.id,canKick=!mine&&(rank==='leader'||(rank==='officer'&&m.rank==='member')); // Same matrix as the server: officers manage members, only the leader touches officers.
+    if(rank==='leader'&&!mine){if(m.rank==='member')actions.append(guildButton('Promote','guild_promote',{member:m.id},m.name+' is now an officer.'));if(m.rank==='officer')actions.append(guildButton('Demote','guild_demote',{member:m.id},m.name+' is a member again.'));actions.append(guildButton('Make leader','guild_transfer',{member:m.id},m.name+' now leads the guild.'));}
+    if(canKick)actions.append(guildButton('Remove','guild_kick',{member:m.id},m.name+' was removed.'));
+    row.append(actions);body.append(row);
+  }
+  host.append(table);
+}
+function renderGuildChat(){
+  const list=$('#guild-chat'),lines=snapshot.guildChat??[];list.replaceChildren();
+  for(const line of lines){const li=text('li',line.emote?'* '+line.name+' '+line.text:line.name+': '+line.text,line.emote?'companion-guild-emote':undefined);list.append(li);} // "/me waves" reads as "* Name waves", as in the game log.
+  if(!lines.length)list.append(text('li','Nothing said yet. Say hello!','field-help'));
+  list.scrollTop=list.scrollHeight;
+  if(document.activeElement!==$('#guild-chat-input'))$('#guild-chat-input').value=guildDraft.chat;
+}
+function renderGuildTreasury(g,leader,rules){
+  const t=g.treasury??{balance:0,ledger:[]},u=g.upgrades??{},price=u.prices??{};
+  $('#guild-treasury-summary').textContent=coins(t.balance)+' LiDollCoins in the treasury · donations are final; only the leader can spend them, and only on guild upgrades.';
+  const presets=$('#guild-donate-presets');presets.replaceChildren();for(const amount of rules.donationPresets??[100,500,1000])presets.append(guildButton('Donate '+coins(amount),'guild_donate',{amount},'Donation sent; it lands once your wallet confirms it.'));
+  $('#guild-donate-amount').max=rules.donationMax??9999;
+  const up=$('#guild-upgrades');up.replaceChildren();
+  if(leader){
+    const upgrade=(label,kind,locked,title)=>{const b=guildButton(label,'guild_upgrade',{kind},label+' bought.');b.dataset.locked=String(locked);b.disabled=busy||locked;b.title=title;return b;};
+    const short=cost=>t.balance<(cost??0)?'The treasury cannot afford this yet.':'';
+    up.append(upgrade('Member cap +5 ('+coins(price.cap??0)+')','cap',(u.cap??0)>=(u.capMax??4)||t.balance<(price.cap??0),(u.cap??0)>=(u.capMax??4)?'Already at the maximum.':short(price.cap)||(u.cap??0)+' of '+(u.capMax??4)+' bought'));
+    up.append(upgrade('Longer MOTD ('+coins(price.motd??0)+')','motd',(u.motd??0)>=(u.motdMax??2)||t.balance<(price.motd??0),(u.motd??0)>=(u.motdMax??2)?'Already at the longest.':short(price.motd)));
+    if(!u.crest)up.append(upgrade('Guild crest ('+coins(price.crest??0)+')','crest',t.balance<(price.crest??0),short(price.crest)||'Unlocks a crest colour beside the tag.'));
+    else{const colour=document.createElement('input');colour.type='color';colour.value=/^#[0-9a-f]{6}$/i.test(g.crest)?g.crest:'#c080ff';colour.setAttribute('aria-label','Crest colour');colour.dataset.guild='true';colour.disabled=busy;colour.addEventListener('change',()=>void guildAct('guild_crest',{value:colour.value},'Crest colour set.'));up.append(text('span','Crest colour','field-help'),colour);}
+  }
+  const host=$('#guild-ledger');host.replaceChildren();
+  if(!(t.ledger??[]).length)return void host.append(text('p','No treasury activity yet.','field-help'));
+  const table=document.createElement('table'),head=document.createElement('thead'),hr=document.createElement('tr'),body=document.createElement('tbody');
+  for(const title of ['When','What','Who','Coins']){const th=text('th',title);th.scope='col';hr.append(th);}head.append(hr);table.append(head,body);
+  for(const e of t.ledger){const row=document.createElement('tr');row.append(text('td',new Date(e.at).toLocaleString()),text('td',String(e.kind).replace(/_/g,' ')+(e.note?' · '+e.note:''),'wrap'),text('td',e.name),text('td',(e.amount>0?'+':'')+coins(e.amount)));body.append(row);}
+  host.append(table);
+}
+function renderGuildApplications(g,leader){
+  const host=$('#guild-applications');host.replaceChildren();
+  if(leader)host.append(guildButton(g.open?'Close applications':'Open applications','guild_settings',{mode:g.open?'closed':'open'},g.open?'Applications closed.':'Applications open.'));
+  if(document.activeElement!==$('#guild-invite-name'))$('#guild-invite-name').value=guildDraft.invite;
+  if(!(g.applications??[]).length)return void host.append(text('p','Nobody is knocking right now.','field-help'));
+  const list=text('ul',undefined,'companion-guild-list');
+  for(const app of g.applications){const li=text('li');li.append(text('span',app.name+' wants to join'),guildButton('Accept','guild_approve',{application:app.id},app.name+' joined.','button small primary'),guildButton('Turn away','guild_reject',{application:app.id},'Application declined.'));list.append(li);}
+  host.append(list);
+}
+function renderGuildBoard(){
+  const host=$('#guild-board');host.replaceChildren();const board=snapshot?.guildLeaderboard??[];
+  if(!board.length)return void host.append(text('p','No guilds yet. Found the first one!','field-help'));
+  const table=document.createElement('table'),head=document.createElement('thead'),hr=document.createElement('tr'),body=document.createElement('tbody');
+  for(const title of ['#','Guild','Members','This week','']){const th=text('th',title);th.scope='col';hr.append(th);}head.append(hr);table.append(head,body);
+  board.forEach((g,i)=>{const row=document.createElement('tr');row.append(text('td',String(i+1)),text('td','['+g.tag+'] '+g.name,'wrap'),text('td',String(g.members)),text('td',g.points+' / '+g.target));const cell=text('td');if(!snapshot.guild)cell.append(guildButton('Apply','guild_apply',{guild:g.id},'Applied to ['+g.tag+'] '+g.name+'.'));row.append(cell);body.append(row);});
+  host.append(table);
+} // Top guilds this week; a guildless player can apply straight from the table.
+$('#guild-create-form').addEventListener('submit',event=>{event.preventDefault();if(busy)return;void guildAct('guild_create',{name:$('#guild-create-name').value.trim(),tag:$('#guild-create-tag').value.trim().toUpperCase()},result=>result.guild?.status==='pending'?'Charter sent; your guild goes live once the fee settles.':'Your guild is founded!');});
+$('#guild-apply-form').addEventListener('submit',event=>{event.preventDefault();if(busy)return;const name=$('#guild-apply-name').value.trim();if(!name)return;void guildAct('guild_apply',{name},()=>{$('#guild-apply-name').value='';return 'Application sent.';});});
+$('#guild-motd-edit').addEventListener('click',()=>{if(busy)return;guildDraft.motd=true;$('#guild-motd-input').value=snapshot?.guild?.motd??'';renderGuild();$('#guild-motd-input').focus();});
+$('#guild-motd-cancel').addEventListener('click',()=>{guildDraft.motd=false;renderGuild();});
+$('#guild-motd-form').addEventListener('submit',event=>{event.preventDefault();if(busy)return;void guildAct('guild_motd',{text:$('#guild-motd-input').value},()=>{guildDraft.motd=false;renderGuild();return 'MOTD saved.';});});
+$('#guild-chat-input').addEventListener('input',()=>{guildDraft.chat=$('#guild-chat-input').value;});
+$('#guild-chat-form').addEventListener('submit',event=>{event.preventDefault();if(busy)return;const line=$('#guild-chat-input').value.trim();if(!line)return;void guildAct('guild_chat',{text:line},()=>{guildDraft.chat='';$('#guild-chat-input').value='';return '';});});
+$('#guild-donate-form').addEventListener('submit',event=>{event.preventDefault();if(busy)return;const amount=Number($('#guild-donate-amount').value);if(!Number.isSafeInteger(amount)||amount<1){$('#guild-status').textContent='Enter a whole number of LiDollCoins.';return;}void guildAct('guild_donate',{amount},()=>{$('#guild-donate-amount').value='';return 'Donation sent; it lands once your wallet confirms it.';});});
+$('#guild-invite-name').addEventListener('input',()=>{guildDraft.invite=$('#guild-invite-name').value;});
+$('#guild-invite-form').addEventListener('submit',event=>{event.preventDefault();if(busy)return;const name=$('#guild-invite-name').value.trim();if(!name)return;void guildAct('guild_invite',{name},()=>{guildDraft.invite='';$('#guild-invite-name').value='';return 'Invitation sent to '+name+'.';});});
+$('#guild-leave').addEventListener('click',()=>{if(busy||!confirm('Leave your guild?'))return;void guildAct('guild_leave',{},'You left the guild.');});
+$('#guild-disband').addEventListener('click',()=>{if(busy||!confirm('Disband the guild? Every member loses it immediately and the treasury is forfeited.'))return;void guildAct('guild_disband',{},'The guild is disbanded.');});

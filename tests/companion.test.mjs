@@ -102,3 +102,12 @@ test('the Diaper Atelier and Clothes Emporium roll through the same gateway and 
   assert.match(app, /if\(error\.status&&error\.status<500&&error\.status!==429\)pendingRoll=null/); // Only a definite refusal forgets the request; a lost reply retries the same roll.
   assert.match(read('companion/index.html'), /id="shops-card"[^>]*hidden/); // Hidden until a server advertising the shops answers.
 });
+
+test('the guild card rides on the existing gateway routes and asks for the slim companion view', () => {
+  const app = read('companion/app.js'), html = read('companion/index.html');
+  assert.match(html, /id="guild-card"/);
+  for (const action of ['guild_create', 'guild_apply', 'guild_accept', 'guild_chat', 'guild_donate', 'guild_invite', 'guild_promote', 'guild_kick', 'guild_leave', 'guild_disband']) assert.match(app, new RegExp(`'${action}'`), action);
+  assert.match(app, /companion:true/); // Every guild write asks the game for the slim companion view back.
+  assert.doesNotMatch(app, /zones\/inspect|Authorization|guild_page/); // No new routes, no bearer, no game-only navigation actions.
+  assert.match(app, /'zones\/action',guildBody\(/); // Guild writes use the same action route as sales and equipment.
+});

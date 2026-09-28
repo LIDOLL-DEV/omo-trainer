@@ -231,3 +231,5 @@ Companion: check current/manual character selection, equipment, inventory, Tush 
 
 
 The companion supports Equip on carried gear and Unequip on worn gear. Curses, full bags, dresses and used-diaper disposal follow game rules. Commands use character revision plus an equipment-source token; stale selections, combat, pending needs turns and uploads are rejected before mutation. Online characters update their committed loadout without acquiring the game controller; an offline cloud edit publishes a new complete save revision. Unsynced local-only progress remains unavailable. Rolled stats and item identity survive swaps.
+
+- **Games > LidollQuest-Companion > Guild** shows your character's guild: roster with online dots, message of the day, the weekly goal, guild chat you can post to, the treasury (donate a preset or a custom amount) and its ledger, and the leaderboard. Officers get invite-by-name and applications; the leader gets upgrades and the crest colour. Without a guild you can accept invitations, found one for the shown charter fee, or apply by name or tag. Guilds are per character, so switch characters to see another one.

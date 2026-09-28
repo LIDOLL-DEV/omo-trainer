@@ -16,6 +16,31 @@
    <div><div id="sheet"></div><section aria-label="Tush status"><h3>Tush Status</h3><div id="tush-status"></div></section></div></div>
   <h3>Equipped</h3><div id="equipment" class="companion-gear"></div>
  </section>
+ <section id="guild-card" class="card" hidden aria-labelledby="guild-heading"><div class="companion-bank-heading"><h2 id="guild-heading">Guild</h2><span id="guild-tag" class="companion-guild-tag" hidden></span></div>
+  <p id="guild-status" class="field-help" role="status"></p>
+  <div id="guild-join" hidden><p id="guild-join-help" class="field-help"></p>
+   <ul id="guild-invites" class="companion-guild-list" aria-label="Guild invitations"></ul><ul id="guild-my-apps" class="companion-guild-list" aria-label="Your applications"></ul>
+   <div class="companion-guild-forms">
+    <form id="guild-create-form"><h3>Found a guild</h3><label for="guild-create-name">Guild name</label><input id="guild-create-name" maxlength="24" minlength="3" required autocomplete="off"><label for="guild-create-tag">Tag (2–4 letters or digits)</label><input id="guild-create-tag" maxlength="4" minlength="2" required autocomplete="off" class="companion-guild-tag-input"><button class="button primary" type="submit" data-guild>Found guild</button></form>
+    <form id="guild-apply-form"><h3>Apply to a guild</h3><label for="guild-apply-name">Guild name or tag</label><input id="guild-apply-name" maxlength="24" required autocomplete="off"><button class="button secondary" type="submit" data-guild>Apply</button></form>
+   </div></div>
+  <div id="guild-home" hidden><p id="guild-summary" class="field-help"></p>
+   <section aria-labelledby="guild-motd-heading"><h3 id="guild-motd-heading">Message of the day</h3><p id="guild-motd" class="companion-description"></p><button id="guild-motd-edit" type="button" class="button secondary" data-guild hidden>Edit MOTD</button>
+    <form id="guild-motd-form" hidden><label for="guild-motd-input">New message of the day</label><textarea id="guild-motd-input" rows="3"></textarea><div class="notification-actions"><button class="button primary" type="submit" data-guild>Save MOTD</button><button id="guild-motd-cancel" type="button" class="button secondary" data-guild>Cancel</button></div></form></section>
+   <section aria-labelledby="guild-goal-heading"><h3 id="guild-goal-heading">Weekly goal</h3><progress id="guild-goal-meter" max="1" value="0"></progress><p id="guild-goal-text" class="field-help"></p></section>
+   <section aria-labelledby="guild-roster-heading"><h3 id="guild-roster-heading">Roster</h3><div id="guild-roster" class="table-scroll"></div></section>
+   <section aria-labelledby="guild-chat-heading"><h3 id="guild-chat-heading">Guild chat</h3><ul id="guild-chat" class="companion-guild-chat" aria-live="polite"></ul>
+    <form id="guild-chat-form"><label for="guild-chat-input" class="companion-sr-only">Message your guild</label><input id="guild-chat-input" maxlength="240" autocomplete="off" placeholder="Say something to your guild…"><button class="button primary" type="submit" data-guild>Send</button></form></section>
+   <section aria-labelledby="guild-treasury-heading"><h3 id="guild-treasury-heading">Treasury</h3><p id="guild-treasury-summary" class="field-help"></p>
+    <form id="guild-donate-form"><span id="guild-donate-presets"></span><label for="guild-donate-amount" class="companion-sr-only">Custom amount</label><input id="guild-donate-amount" type="number" min="1" step="1" placeholder="Custom"><button class="button secondary" type="submit" data-guild>Donate</button></form>
+    <div id="guild-upgrades" class="notification-actions"></div><div id="guild-ledger" class="table-scroll"></div></section>
+   <section id="guild-manage" hidden aria-labelledby="guild-manage-heading"><h3 id="guild-manage-heading">Officer tools</h3>
+    <form id="guild-invite-form"><label for="guild-invite-name">Invite by character name</label><input id="guild-invite-name" maxlength="24" required autocomplete="off"><button class="button secondary" type="submit" data-guild>Invite</button></form>
+    <div id="guild-applications"></div></section>
+   <div class="notification-actions"><button id="guild-leave" type="button" class="button secondary" data-guild>Leave guild</button><button id="guild-disband" type="button" class="button secondary" data-guild hidden>Disband guild</button></div>
+  </div>
+  <section aria-labelledby="guild-board-heading"><h3 id="guild-board-heading">Leaderboard</h3><div id="guild-board" class="table-scroll"></div></section>
+ </section>
  <section class="card"><h2>Inventory</h2><p id="inventory-summary" class="field-help"></p>
   <div id="inventory-tabs" class="companion-tabs" role="tablist" aria-label="Item categories"></div>
   <div id="inventory" class="table-scroll" role="tabpanel" tabindex="0"></div></section>

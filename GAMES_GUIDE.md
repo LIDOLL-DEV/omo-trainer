@@ -29,9 +29,10 @@ either check.
 
 The page calls `api/lidollcoin/browser/session` to see whether a wallet
 connection exists, `api/lidollcoin/browser/zones?view=companion&bank_page=N` for
-the character list, wallet and bank, `api/lidollcoin/browser/zones/inspect` for
-the character sheet, and `api/lidollcoin/browser/zones/action` with `bank_sell`
-to sell a stored item. The tracker only proxies those calls; characters, banks,
+the character list, wallet, bank, character sheet, shops and guild (one slim
+snapshot; `zones/inspect` is no longer used here), `api/lidollcoin/browser/zones/action`
+with `bank_sell` to sell a stored item, and the same route for equipment, shop
+rolls and every `guild_*` write. The tracker only proxies those calls; characters, banks,
 prices and the daily coin allowance all live in the LiDollQuest service.
 
 An unlinked visitor gets a **Connect LiDollQuest** button pointing at
@@ -130,3 +131,11 @@ connection already carries; without it the page explains how to reconnect rather
 link as broken. "Not enough diamonds. Nothing was rolled." means exactly that: no debit, no item.
 
 With `PUPPETEER_MODULE` and `CHROME_PATH` set, `node tests/companion-shops-browser.mjs` drives the whole flow against a stubbed gateway and saves screenshots.
+
+## Guilds in the companion (2026-09-28)
+
+The companion's **Guild** card shows the selected character's guild: `[TAG] Name`, the message of the day (officers edit it), the weekly goal meter, the roster with online dots and rank-gated Promote / Demote / Make leader / Remove buttons, guild chat (read and post), the treasury with donate presets or a custom amount, the ledger, leader-only upgrades and a crest colour picker, officer tools (invite by character name, approve or turn away applications, open/close applications), Leave / Disband, and this week's leaderboard. A character without a guild sees invitations to join or decline, a *Found a guild* form (the charter fee is shown), an *Apply* form and Apply buttons on the leaderboard.
+
+Everything rides on the two routes the companion already uses: reads come with the `zones?view=companion` snapshot (`guild`, `guildInvitations`, `guildApplications`, `guildChat`, `guildLeaderboard`, `guildRules`, `guildSupport`), writes are `zones/action` bodies (`guild_create`, `guild_apply`, `guild_accept`, `guild_chat`, `guild_donate`, `guild_invite`, …) carrying `companion:true` so the game answers with the slim companion view. No gateway route, proxy parameter or scope changed; the game server holds every guild rule and re-checks each action. Guild membership is per character, so switching characters switches guilds. Deploy the matching LiDollQuest service first; an older service simply omits `guildSupport` and the card stays hidden.
+
+With `PUPPETEER_MODULE` and `CHROME_PATH` set, `node tests/companion-guild-browser.mjs` drives the card against a stubbed gateway: member and leader views, chat posting with a draft that survives the refresh, a preset and a refused donation, MOTD editing, and the guildless forms.
