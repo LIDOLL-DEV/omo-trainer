@@ -7,9 +7,7 @@ The first **new observation, wetting, diaper change, or roll successfully synced
 | 1 | 10 coins |
 | 2 | 20 coins |
 | 3 | 30 coins |
-| 4 | 1 diamond |
-| 5 | 2 diamonds |
-| 6 and onward | One additional diamond each day |
+| 4 and onward | 1 diamond a day (capped; a long streak never pays more) |
 
 A missed calendar day resets the next check-in to day 1. Existing currency balances remain. The timezone is pinned from the account's earliest enrollment when its first bonus is earned (UTC if there is no enrollment). It does not change with travel or later enrollment edits. Server receipt time determines the reward date: offline records count when synced, and backdating a record cannot fill missed days. Historic records are not automatically paid retroactive login bonuses.
 

@@ -124,7 +124,7 @@ After saving an observation, a wetting or a diaper change, dismiss the reward mo
 
 ## Login bonuses and diamonds
 
-Save and sync one observation, wetting, diaper change or roll each day for a growing bonus. Visit Login bonuses in the menu for weekly/monthly calendars and daily statistics. Use Stickers & market to exchange diamonds for coins at 1:50. Offline saves qualify on their sync day; see LOGIN_BONUSES_GUIDE.md for streak rules.
+Save and sync one observation, wetting, diaper change or roll each day for a daily bonus: 10, 20, then 30 coins, then 1 diamond every day your streak continues. Visit Login bonuses in the menu for weekly/monthly calendars and daily statistics. Use Stickers & market to exchange diamonds for coins at 1:50. Offline saves qualify on their sync day; see LOGIN_BONUSES_GUIDE.md for streak rules.
 
 ## Administrator analysis checks
 

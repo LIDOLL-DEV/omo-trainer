@@ -22,7 +22,7 @@ try {
  const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));await page.setViewport({width:1440,height:1000});
  await page.evaluateOnNewDocument(()=>sessionStorage.setItem('little-log.connect','1'));await page.goto(origin+'/tracker/#login-bonuses',{waitUntil:'networkidle0'});
  await page.waitForFunction(()=>document.querySelector('#bonus-streak').textContent==='5');
- assert.match(await page.$eval('#bonus-next',node=>node.textContent),/3 diamonds/);
+ assert.match(await page.$eval('#bonus-next',node=>node.textContent),/^1 diamond$/);
  assert.equal(await page.$$eval('#bonus-calendar button.checked',nodes=>nodes.length),5);
  assert.equal(await page.$eval('[data-page="login-bonuses"]',node=>node.getAttribute('aria-current')),'page');
  await page.select('#bonus-view','week');await page.waitForFunction(()=>document.querySelectorAll('#bonus-calendar button').length===7);
@@ -30,7 +30,7 @@ try {
  await navigateMenu(page,'[data-page="overview"]');await page.select('#wetting-category','bedwetting');await page.click('#wetting-form button[type="submit"]');
  await page.waitForFunction(()=>document.querySelector('#observation-reward-title').textContent==='You earned a sticker!');await page.click('#observation-reward-dialog .primary');
  await navigateMenu(page,'[data-page="login-bonuses"]');await page.waitForFunction(()=>document.querySelector('#bonus-streak').textContent==='6');
- await page.click('#bonus-calendar [aria-current="date"]');assert.match(await page.$eval('#bonus-day-reward',node=>node.textContent),/3 diamonds paid/);
+ await page.click('#bonus-calendar [aria-current="date"]');assert.match(await page.$eval('#bonus-day-reward',node=>node.textContent),/1 diamond paid/);
  assert.match(await page.$eval('#bonus-day-stats',node=>node.textContent),/Recorded events1/);
  await page.screenshot({path:resolve(directory,'calendar-desktop.png'),fullPage:true});
  for(const theme of ['little-tracker','caregiver-tracker'])for(const width of [320,390,1440]) {
@@ -38,12 +38,12 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Calendar fits '+theme+' at '+width);
  }
  await page.setViewport({width:390,height:950});await page.screenshot({path:resolve(directory,'calendar-mobile.png'),fullPage:true});
- await navigateMenu(page,'[data-page="stickers"]');await page.waitForFunction(()=>document.querySelector('#economy-diamonds').textContent==='6');
+ await navigateMenu(page,'[data-page="stickers"]');await page.waitForFunction(()=>document.querySelector('#economy-diamonds').textContent==='3');
  await page.$eval('#diamond-quantity',input=>{input.value='2';input.dispatchEvent(new Event('input',{bubbles:true}));});
  assert.match(await page.$eval('#diamond-exchange-quote',node=>node.textContent),/100 coins/);await page.click('#diamond-exchange-submit');
- await page.waitForFunction(()=>document.querySelector('#economy-diamonds').textContent==='4'&&document.querySelector('#economy-coins').textContent==='210');
+ await page.waitForFunction(()=>document.querySelector('#economy-diamonds').textContent==='1'&&document.querySelector('#economy-coins').textContent==='210');
  const query=await page.evaluate(async()=>{const response=await fetch('./api/login-bonuses');return {cache:response.headers.get('cache-control'),data:await response.json()};});
- assert.equal(query.cache,'no-store');assert.equal(query.data.streak,6);assert.equal(query.data.earned.diamonds,6,'Exchanging diamonds does not erase earned rewards');
+ assert.equal(query.cache,'no-store');assert.equal(query.data.streak,6);assert.equal(query.data.earned.diamonds,3,'Exchanging diamonds does not erase earned rewards');
  assert.equal((await fetch(origin+'/tracker/api/login-bonuses')).status,401);
  assert.equal(await page.evaluate(async()=>(await fetch('./api/economy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'diamond-exchange',quantity:1,requestId:'csrf-test'})})).status),403);
  await navigateMenu(page,'[data-page="login-bonuses"]');await page.setOfflineMode(true);await page.click('#bonus-refresh');await page.waitForFunction(()=>document.querySelector('#bonus-content').hidden);await page.setOfflineMode(false);await page.click('#bonus-refresh');await page.waitForFunction(()=>!document.querySelector('#bonus-content').hidden);

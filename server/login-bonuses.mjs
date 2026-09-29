@@ -1,9 +1,9 @@
 import {protocolDay} from '../lib/training.js';
 import {isObservation, isRoll, liquidTotal, WETTING_CATEGORIES} from '../lib/model.js';
 
-export function dailyPayout(streak) { // The first three days pay coins; each subsequent day adds one more whole diamond.
+export function dailyPayout(streak) { // The first three days pay coins; every day after that pays exactly one diamond (capped 2026-09-29; it used to grow by one a day).
   if(!Number.isSafeInteger(streak)||streak<1||streak>2147483647)throw Error('Invalid check-in streak.');
-  return streak<=3?{asset:'coins',amount:streak*10}:{asset:'diamonds',amount:streak-3};
+  return streak<=3?{asset:'coins',amount:streak*10}:{asset:'diamonds',amount:1}; // Past receipts keep what they paid.
 }
 const shift=(day,offset)=>new Date(Date.parse(day+'T12:00:00Z')+offset*86400000).toISOString().slice(0,10); // Calendar arithmetic stays independent of daylight-saving hour changes.
 const validDay=day=>typeof day==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(day)&&Number.isFinite(Date.parse(day+'T12:00:00Z'))&&shift(day,0)===day;
