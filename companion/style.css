@@ -1,23 +1,66 @@
 /* Companion-only layout. Colours and cards come from styles.css/themes.css so both themes stay correct. */
-.companion-page main{max-width:60rem;margin:0 auto;padding:1.5rem 1rem 3rem;}
-.companion-back{display:inline-block;margin-bottom:1rem;}
-.companion-name{font-size:1.25rem;font-weight:700;margin:0 0 .5rem;}
-.companion-facts{display:grid;grid-template-columns:auto 1fr;gap:.25rem 1rem;margin:0 0 1rem;}
-.companion-facts dt{font-weight:600;opacity:.8;}
-.companion-facts dd{margin:0;}
-.companion-gear{display:grid;grid-template-columns:repeat(auto-fill,minmax(13rem,1fr));gap:.5rem;}
-.companion-slot{display:flex;flex-direction:column;gap:.15rem;padding:.5rem .65rem;border-radius:.6rem;background:rgb(0 0 0 / 4%);}
-.companion-slot-name{text-transform:capitalize;font-size:.8rem;opacity:.75;}
+/* Desktop: a sticky character rail beside a wide main column whose cards reflow by their own width (container queries); phones stack everything. */
+.companion-page main{max-width:100rem;margin:0 auto;padding:2rem clamp(1rem,3vw,2.5rem) 4rem;}
+.companion-hero{margin:0 0 1.25rem;}
+.companion-hero .eyebrow{margin:1rem 0 .5rem;}
+.companion-hero .subtitle{max-width:46rem;}
+.companion-back{display:inline-block;font:11px/1.6 var(--mono);letter-spacing:1px;color:var(--muted);}
+.companion-back:hover,.companion-back:focus-visible{color:var(--pink);}
+.companion-status{margin:0 0 1rem;font-size:13px;color:var(--muted);}
+.companion-status:empty{display:none;}
+.companion-link{max-width:36rem;}
+
+.companion-layout{display:grid;grid-template-columns:19rem minmax(0,1fr);gap:1.5rem;align-items:start;}
+.companion-layout[hidden]{display:none;}
+.companion-rail{position:sticky;top:1.5rem;min-width:0;}
+.companion-rail .card{display:flex;flex-direction:column;gap:.85rem;padding:20px;}
+.companion-rail select{width:100%;font-size:13px;}
+.companion-rail .field-help{margin:0;}
+.companion-wallet{padding:.85rem 1rem;border:1px solid var(--border);border-radius:14px;background:var(--panel);}
+.companion-wallet:empty{display:none;}
+.companion-wallet-coins{font:italic 900 1.75rem/1 var(--display);letter-spacing:-1px;color:var(--pink);font-variant-numeric:tabular-nums;}
+.companion-wallet p{margin:.45rem 0 0;}
+.companion-nav{display:flex;flex-direction:column;gap:.2rem;padding-top:.75rem;border-top:1px solid var(--border);}
+.companion-nav a{padding:.5rem .75rem;border-radius:10px;font-size:13px;font-weight:600;color:var(--ink);}
+.companion-nav a:hover,.companion-nav a:focus-visible{background:var(--panel);color:var(--pink);}
+.companion-nav a[hidden]{display:none;}
+.companion-main{display:flex;flex-direction:column;gap:1.5rem;min-width:0;container-type:inline-size;}
+.companion-main .card{scroll-margin-top:1.5rem;}
+.companion-split{display:grid;grid-template-columns:minmax(0,1fr);gap:1.5rem;align-items:start;}
+@container (min-width:58rem){.companion-split{grid-template-columns:repeat(2,minmax(0,1fr));}}
+
+.companion-card-head{margin:0 0 1.1rem;}
+.companion-card-head .eyebrow{margin:0 0 .35rem;}
+.companion-card-head h2{font-size:1.3rem;}
+.companion-card-head .field-help{margin:.35rem 0 0;}
+#character-name{font:italic 900 clamp(1.6rem,2.4vw,2.2rem)/1.1 var(--display);letter-spacing:-1px;overflow-wrap:anywhere;}
 .companion-bank-heading{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:.5rem;}
 .companion-bank-heading h2{margin:0;}
-@media (prefers-color-scheme:dark){.companion-slot{background:rgb(255 255 255 / 6%);}}
+.companion-bank-heading .eyebrow{margin:0 0 .35rem;}
+.companion-stats-heading,.companion-overview h3,.companion-character>h3{margin:0 0 .55rem;font:10px/1.6 var(--mono);letter-spacing:1.6px;text-transform:uppercase;color:var(--pink);}
+.companion-stats-heading:not(:first-child){margin-top:1.1rem;}
 
-.companion-overview{display:grid;grid-template-columns:minmax(12rem,1fr) minmax(15rem,1.25fr);gap:1.5rem;align-items:start;}
-.companion-description{white-space:pre-wrap;overflow-wrap:anywhere;max-height:20rem;overflow:auto;} /* Preserve paragraphs and contain even a full-length unbroken description. */
+.companion-overview{display:grid;grid-template-columns:minmax(0,1fr);gap:1.5rem;align-items:start;margin:0 0 1.5rem;}
+.companion-overview>*{min-width:0;}
+@container (min-width:44rem){.companion-overview{grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);grid-template-rows:auto 1fr;grid-template-areas:"about stats" "tush stats";}.companion-about{grid-area:about;}.companion-stats{grid-area:stats;}.companion-tush{grid-area:tush;}}
+@container (min-width:72rem){.companion-overview{grid-template-columns:minmax(0,1fr) minmax(0,1.75fr) minmax(0,.9fr);grid-template-rows:auto;grid-template-areas:"about stats tush";}}
+.companion-description{white-space:pre-wrap;overflow-wrap:anywhere;max-height:20rem;overflow:auto;margin:0 0 .75rem;line-height:1.6;} /* Preserve paragraphs and contain even a full-length unbroken description. */
 #description-input{box-sizing:border-box;width:100%;max-width:100%;resize:vertical;font:inherit;line-height:1.5;}
-.companion-overview>section{min-width:0;}
+.companion-facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(7.25rem,1fr));gap:.45rem;margin:0;}
+.companion-fact{min-width:0;padding:.5rem .65rem;border:1px solid var(--border);border-radius:10px;background:var(--panel);}
+.companion-fact dt{font-size:.68rem;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
+.companion-fact dd{margin:.15rem 0 0;font-size:1.05rem;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}
+.companion-fact progress{display:block;height:.35rem;margin-top:.35rem;}
+.companion-tush{padding:1rem;border:1px solid var(--border);border-radius:14px;background:var(--panel);}
+#tush-status strong{display:block;font-size:1.05rem;overflow-wrap:anywhere;}
+#tush-status p{margin:.35rem 0;}
+.companion-gear{display:grid;grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr));gap:.6rem;}
+.companion-slot{display:flex;flex-direction:column;gap:.3rem;min-width:0;padding:.65rem .8rem;border:1px solid var(--border);border-radius:12px;background:var(--panel);}
+.companion-slot strong{overflow-wrap:anywhere;}
+.companion-slot .button{align-self:flex-start;margin-top:auto;}
+.companion-slot.is-empty{background:transparent;border-style:dashed;opacity:.7;}
+.companion-slot-name{font-size:.7rem;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
 
-.companion-facts{grid-template-columns:repeat(2,minmax(0,1fr));font-variant-numeric:tabular-nums;}
 .companion-page td.wrap{white-space:normal;overflow-wrap:anywhere;}
 .companion-page progress{width:100%;accent-color:var(--pink);} /* --accent is defined by no theme; the absorption meter must follow the real theme token. */
 /* Item category tabs: the game's four battle groups plus All, sized for thumbs as well as pointers. */
@@ -27,10 +70,11 @@
 .companion-tab[aria-selected="true"]{background:var(--pink);border-color:var(--pink);color:var(--page);}
 .companion-tab-count{font-weight:600;font-size:.72rem;opacity:.75;font-variant-numeric:tabular-nums;}
 .companion-page #inventory:focus-visible{outline:2px solid var(--pink);outline-offset:2px;border-radius:.5rem;}
-@media(max-width:38rem){.companion-overview{grid-template-columns:1fr;}.companion-page main{padding-inline:.75rem;}}
 /* Diaper Atelier and Clothes Emporium: two shop panels and the last roll's reveal, tinted by its rarity colour. */
-.companion-shops{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.75rem;margin:.5rem 0;}
-.companion-shop{display:flex;flex-direction:column;gap:.5rem;padding:.75rem .9rem;border:1px solid var(--border);border-radius:.75rem;background:var(--panel);}
+.companion-shops-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:1rem;align-items:start;}
+@container (min-width:62rem){.companion-shops-layout:has(>#shop-result:not([hidden])){grid-template-columns:minmax(0,2fr) minmax(16rem,1fr);}} /* The last roll sits beside the shops once there is one. */
+.companion-shops{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.75rem;margin:0;}
+.companion-shop{display:flex;flex-direction:column;gap:.55rem;padding:1rem 1.1rem;border:1px solid var(--border);border-radius:.75rem;background:var(--panel);}
 .companion-shop h3,.companion-shop p{margin:0;}
 .companion-shop .button{margin-top:auto;align-self:flex-start;}
 .companion-diamond{display:flex;flex-direction:column;gap:.5rem;padding-top:.5rem;border-top:1px dashed var(--border);} /* The 1-diamond roll sits under the coin roll in the same shop card. */
@@ -38,7 +82,7 @@
 .companion-odds{display:flex;flex-wrap:wrap;gap:.25rem .75rem;margin:0;padding:0;list-style:none;font-size:.8rem;font-variant-numeric:tabular-nums;}
 .companion-odds li{display:inline-flex;align-items:center;gap:.3rem;}
 .companion-rarity-dot{width:.7rem;height:.7rem;border-radius:50%;border:1px solid var(--border);flex:none;}
-.companion-reveal{margin-top:.75rem;padding:.75rem .9rem;border:1px solid var(--border);border-left:.4rem solid var(--rarity,var(--pink));border-radius:.75rem;background:var(--panel);}
+.companion-reveal{margin:0;padding:.75rem .9rem;border:1px solid var(--border);border-left:.4rem solid var(--rarity,var(--pink));border-radius:.75rem;background:var(--panel);}
 .companion-reveal>*{margin:0 0 .4rem;}
 .companion-reveal-label{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;opacity:.7;}
 .companion-reveal-name{font-size:1.15rem;overflow-wrap:anywhere;}
@@ -48,6 +92,9 @@
 /* ── Guild card (2026-09-28) ── */
 .companion-guild-tag{font-weight:600;padding:.15rem .6rem;border-radius:.6rem;border:2px solid var(--crest,transparent);background:rgba(0,0,0,.04)}
 .companion-guild-tag-input{text-transform:uppercase}
+.companion-guild-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:1.5rem;margin:0 0 1rem;}
+@container (min-width:60rem){.companion-guild-grid{grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);}}
+.companion-guild-col{display:flex;flex-direction:column;gap:1.25rem;min-width:0;}
 .companion-guild-list{list-style:none;padding:0;margin:0 0 .75rem}
 .companion-guild-list li{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;padding:.35rem 0}
 .companion-guild-forms{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr))}
@@ -61,3 +108,7 @@
 #guild-chat-input{flex:1 1 12rem}
 #guild-donate-amount{width:7rem}
 #guild-goal-meter{width:100%;max-width:28rem}
+
+/* Tablets and phones: the rail becomes a card above everything, and its jump links wrap into pills. */
+@media(max-width:64rem){.companion-layout{grid-template-columns:minmax(0,1fr);}.companion-rail{position:static;}.companion-nav{flex-direction:row;flex-wrap:wrap;gap:.35rem;}.companion-nav a{border:1px solid var(--border);border-radius:999px;padding:.35rem .8rem;font-size:12px;}}
+@media(max-width:38rem){.companion-page main{padding-inline:.75rem;}}

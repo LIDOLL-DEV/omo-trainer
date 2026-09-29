@@ -59,23 +59,31 @@ function clearSheet(){
   $('#shops-card').hidden=true;$('#shop-result').hidden=true;$('#guild-card').hidden=true;
   $('#freshness').textContent='';$('#inventory-summary').textContent='';
   $('#description').textContent='';$('#description-panel').hidden=!descriptionDraft;
+  $('#character-name').textContent='Character';$('#character-tagline').textContent='';syncNav();
 } // Clear every character panel together, including private details after unlinking or a failed selection.
+function syncNav(){for(const link of document.querySelectorAll('.companion-nav a'))link.hidden=Boolean(document.querySelector(link.getAttribute('href'))?.hidden);} // Only offer jumps to cards this character actually shows.
 function renderSheet(){
   clearSheet();const sheet=snapshot?.sheet,host=$('#sheet');
   renderDescription();
+  $('#character-name').textContent=sheet?.name??snapshot?.character?.name??'Character';
   if(!sheet?.available){host.append(text('p','No synced character details yet. Save this character in the game with cloud sync enabled, or enter an online hub.','field-help'));return;}
   const info=sheet.player_info??{};
   $('#freshness').textContent=(sheet.online?'Playing online · updates every 15 seconds':sheet.source==='cloud'?'Latest cloud save':'Last synced online state')+(sheet.updatedAt?' · '+new Date(sheet.updatedAt).toLocaleString():'');
-  host.append(text('h3',sheet.name,'companion-name'));
-  const facts=text('dl',undefined,'companion-facts');
-  const ratio=(value,max)=>value===undefined?undefined:String(value)+(max===undefined?'':' / '+max);
-  const stats=[['Level',sheet.level],['Class',sheet.class_id],['XP',info.xp],['Health',ratio(info.playerHealth,info.playerHealthMax)],['MP',ratio(sheet.player_mp,sheet.player_mp_max)],
-   ['Strength',info.str],['Defence',info.def],['Dexterity',info.dex],['Intelligence',info.int],['Charisma',info.cha],['Stat points',info.stat_points],
-   ['Stamina',info.stamina],['Hunger',info.hunger],['Thirst',info.thirst],['Wet',info.wet],['Tum',info.tum],['Shame',info.shame],['Excitement',info.excitement],
-   ['Childishness',sheet.childish],['Smell',info.diaper_tum_absorbed],['Accidents',info.accident_bulk],['Incontinence',info.incontinence],['Freeze',info.grossout_chance]];
-  for(const [label,value] of stats)if(value!==undefined&&value!==null)facts.append(text('dt',label),text('dd',String(value)));
-  host.append(facts);
-  for(const slot of sheet.equipment??[]){const row=text('div',undefined,'companion-slot');row.append(text('span',slot.slot.replace(/_/g,' '),'companion-slot-name'),text('strong',slot.name));if(slot.item?.cursed)row.append(text('span','Cursed','field-help'));if(slot.item_id)row.append(equipmentButton('Unequip','companion_unequip',slot.slot,slot.item_id,slot.locked));$('#equipment').append(row);}
+  $('#character-tagline').textContent=[sheet.level!==undefined&&sheet.level!==null?'Level '+sheet.level:'',sheet.class_id?capital(String(sheet.class_id).replace(/_/g,' ')):''].filter(Boolean).join(' · ');
+  const stats=[['Vitals',[['Health',info.playerHealth,info.playerHealthMax],['MP',sheet.player_mp,sheet.player_mp_max],['XP',info.xp],['Stamina',info.stamina],['Hunger',info.hunger],['Thirst',info.thirst]]],
+   ['Attributes',[['Strength',info.str],['Defence',info.def],['Dexterity',info.dex],['Intelligence',info.int],['Charisma',info.cha],['Stat points',info.stat_points]]],
+   ['Condition',[['Wet',info.wet],['Tum',info.tum],['Shame',info.shame],['Excitement',info.excitement],['Childishness',sheet.childish],['Smell',info.diaper_tum_absorbed],['Accidents',info.accident_bulk],['Incontinence',info.incontinence],['Freeze',info.grossout_chance]]]];
+  for(const [title,rows] of stats){ // Three small tile groups instead of one long list; Health and MP carry a bar when their maximum is known.
+    const shown=rows.filter(([,value])=>value!==undefined&&value!==null);if(!shown.length)continue;
+    const facts=text('dl',undefined,'companion-facts');facts.setAttribute('aria-label',title);
+    for(const [label,value,max] of shown){
+      const tile=text('div',undefined,'companion-fact'),figure=text('dd',String(value)+(max===undefined||max===null?'':' / '+max));
+      if(Number(max)>0){const bar=document.createElement('progress');bar.max=Number(max);bar.value=Math.min(Math.max(Number(value)||0,0),Number(max));bar.setAttribute('aria-hidden','true');figure.append(bar);}
+      tile.append(text('dt',label),figure);facts.append(tile);
+    }
+    host.append(text('h3',title,'companion-stats-heading'),facts);
+  }
+  for(const slot of sheet.equipment??[]){const row=text('div',undefined,'companion-slot'+(slot.item_id?'':' is-empty'));row.append(text('span',slot.slot.replace(/_/g,' '),'companion-slot-name'),text('strong',slot.name));if(slot.item?.cursed)row.append(text('span','Cursed','field-help'));if(slot.item_id)row.append(equipmentButton('Unequip','companion_unequip',slot.slot,slot.item_id,slot.locked));$('#equipment').append(row);}
   renderInventory();
   const tush=sheet.tush;$('#tush-status').append(text('strong',tush.name),text('p',tush.status));
   if(tush.is_diaper){const meter=document.createElement('progress');meter.max=tush.capacity;meter.value=tush.wet_absorbed+tush.mess_absorbed;meter.setAttribute('aria-label','Absorption used');$('#tush-status').append(meter,text('p',tush.wet_absorbed+' wet + '+tush.mess_absorbed+' messy / '+tush.capacity+' capacity','field-help'));}
@@ -306,11 +314,12 @@ function apply(value){
   if(active&&!characters.some(row=>row.id===active))active='';
   $('#character').replaceChildren(new Option('Currently playing / latest character',''),...characters.map(row=>new Option(row.name,row.id)));
   $('#character').value=active;
-  $('#wallet').textContent=snapshot.coins===undefined?'':coins(snapshot.coins)+' LiDollCoins · '+coins(snapshot.dailyRemaining??0)+' of today’s '+coins(snapshot.dailyCap??0)+'-coin selling allowance left';
+  $('#wallet').replaceChildren();
+  if(snapshot.coins!==undefined)$('#wallet').append(text('strong',coins(snapshot.coins),'companion-wallet-coins'),text('span',' LiDollCoins'),text('p',coins(snapshot.dailyRemaining??0)+' of today’s '+coins(snapshot.dailyCap??0)+'-coin selling allowance left','field-help'));
   bank=snapshot.bank;if(bank)page=bank.page;
   $('#content').hidden=!characters.length;$('#link').hidden=true;
   $('#status').textContent=characters.length?'':'This account has no LiDollQuest characters yet. Start one in the game and come back.';
-  renderBank();renderSheet();renderShops();renderGuild();
+  renderBank();renderSheet();renderShops();renderGuild();syncNav();
 }
 async function load(){
   const session=await request('session');
@@ -319,7 +328,7 @@ async function load(){
   const snapshot=await request('zones',null,'?view=companion'+(active?'&character_id='+encodeURIComponent(active):'')+'&bank_page='+page);
   apply(snapshot);
 }
-$('#character').addEventListener('change',()=>{resetDescription();active=$('#character').value;page=0;clearSheet();bank=null;snapshot=null;renderBank();$('#status').textContent='Loading character?';$('#bank-status').textContent='';$('#shop-status').textContent='';void run(load);});
+$('#character').addEventListener('change',()=>{resetDescription();active=$('#character').value;page=0;clearSheet();bank=null;snapshot=null;renderBank();$('#status').textContent='Loading character…';$('#bank-status').textContent='';$('#shop-status').textContent='';void run(load);});
 $('#inventory-tabs').addEventListener('keydown',event=>{ // Arrow keys cycle tabs the way the game's shoulder buttons do, wrapping at both ends.
   const step={ArrowLeft:-1,ArrowRight:1,Home:'first',End:'last'}[event.key];if(step===undefined)return;
   const index=groups.findIndex(group=>group.id===tab);

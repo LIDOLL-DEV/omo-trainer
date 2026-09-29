@@ -1,22 +1,42 @@
 <!doctype html><html lang="en" data-theme="little-tracker"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fff5fa"><title>LidollQuest-Companion · Little Log</title><script src="../theme-init.js"></script><link rel="stylesheet" href="../styles.css"><link rel="stylesheet" href="../themes.css"><link rel="stylesheet" href="../coins/style.css"><link rel="stylesheet" href="./style.css"></head><body class="companion-page"><main>
-<a class="companion-back" href="../#games">Back to Games</a><h1>LidollQuest-Companion</h1>
-<p class="section-copy">Your adventurer’s outfit, supplies, stats and bank, plus the Diaper Atelier and Clothes Emporium, together in one place.</p><p id="status" role="status">Checking your connection…</p>
-<section id="link" class="card" hidden><h2>Connect LiDollQuest</h2><p>Connect to see your characters and their latest synced game state.</p><a id="link-start" class="button primary" href="../api/lidollcoin/browser/connect?view=companion">Connect LiDollQuest</a></section>
-<section id="content" hidden>
- <section class="card"><div class="companion-bank-heading"><h2>Character</h2><button id="reload" class="button secondary" type="button">Refresh</button></div>
-  <p><label for="character">Your characters</label><select id="character"></select></p><p id="wallet" class="field-help"></p><p id="freshness" class="field-help"></p>
-  <div class="companion-overview"><section id="description-panel" hidden aria-labelledby="description-heading"><h3 id="description-heading">Character description</h3>
-    <p id="description" class="companion-description"></p><button id="description-edit" type="button" class="button secondary">Edit description</button>
+<header class="companion-hero"><a class="companion-back" href="../#games">&larr; Back to Games</a><p class="eyebrow">YOUR ADVENTURER, ANYWHERE</p><h1>LidollQuest-Companion</h1>
+<p class="subtitle">Your adventurer’s outfit, supplies, stats and bank, plus the Diaper Atelier and Clothes Emporium, together in one place.</p></header>
+<p id="status" class="companion-status" role="status">Checking your connection…</p>
+<section id="link" class="card companion-link" hidden><h2>Connect LiDollQuest</h2><p>Connect to see your characters and their latest synced game state.</p><a id="link-start" class="button primary" href="../api/lidollcoin/browser/connect?view=companion">Connect LiDollQuest</a></section>
+<div id="content" class="companion-layout" hidden>
+<aside class="companion-rail"><section class="card" aria-labelledby="rail-heading">
+  <div class="companion-bank-heading"><h2 id="rail-heading">Your characters</h2><button id="reload" class="button small secondary" type="button">Refresh</button></div>
+  <label for="character" class="companion-sr-only">Your characters</label><select id="character"></select>
+  <div id="wallet" class="companion-wallet"></div><p id="freshness" class="field-help"></p>
+  <nav class="companion-nav" aria-label="Companion sections"><a href="#character-card">Adventurer</a><a href="#shops-card">Atelier &amp; Emporium</a><a href="#inventory-card">Inventory</a><a href="#bank-card">Bank</a><a href="#guild-card">Guild</a></nav>
+ </section></aside>
+<div class="companion-main">
+ <section id="character-card" class="card companion-character" aria-labelledby="character-name"><div class="companion-card-head"><p class="eyebrow">ADVENTURER</p><h2 id="character-name">Character</h2><p id="character-tagline" class="field-help"></p></div>
+  <div class="companion-overview"><section id="description-panel" class="companion-about" hidden aria-labelledby="description-heading"><h3 id="description-heading">Character description</h3>
+    <p id="description" class="companion-description"></p><button id="description-edit" type="button" class="button small secondary">Edit description</button>
     <form id="description-form" hidden><label for="description-input">Describe your character</label>
      <p id="description-help" class="field-help">Public on your playerdoll previews. Free to edit; up to 2,000 characters. Leave blank to clear.</p>
      <textarea id="description-input" rows="8" aria-describedby="description-help description-count"></textarea><p id="description-count" class="field-help"></p>
      <div class="notification-actions"><button id="description-save" type="submit" class="button primary">Save description</button><button id="description-cancel" type="button" class="button secondary">Cancel</button></div>
     </form><p id="description-status" role="status" class="field-help"></p>
    </section>
-   <div><div id="sheet"></div><section aria-label="Tush status"><h3>Tush Status</h3><div id="tush-status"></div></section></div></div>
+   <div id="sheet" class="companion-stats"></div>
+   <section class="companion-tush" aria-labelledby="tush-heading"><h3 id="tush-heading">Tush Status</h3><div id="tush-status"></div></section></div>
   <h3>Equipped</h3><div id="equipment" class="companion-gear"></div>
  </section>
- <section id="guild-card" class="card" hidden aria-labelledby="guild-heading"><div class="companion-bank-heading"><h2 id="guild-heading">Guild</h2><span id="guild-tag" class="companion-guild-tag" hidden></span></div>
+ <section id="shops-card" class="card" hidden aria-labelledby="shops-heading"><div class="companion-card-head"><p class="eyebrow">ROLL SOMETHING CUTE</p><h2 id="shops-heading">Diaper Atelier &amp; Clothes Emporium</h2><p id="shops-summary" class="field-help"></p></div>
+  <div class="companion-shops-layout"><div id="shops" class="companion-shops"></div><section id="shop-result" class="companion-reveal" hidden aria-label="Your last roll"></section></div>
+  <p id="shop-status" class="field-help" role="status"></p>
+ </section>
+ <div class="companion-split">
+ <section id="inventory-card" class="card" aria-labelledby="inventory-heading"><div class="companion-card-head"><p class="eyebrow">IN YOUR BAG</p><h2 id="inventory-heading">Inventory</h2><p id="inventory-summary" class="field-help"></p></div>
+  <div id="inventory-tabs" class="companion-tabs" role="tablist" aria-label="Item categories"></div>
+  <div id="inventory" class="table-scroll" role="tabpanel" tabindex="0"></div></section>
+ <section id="bank-card" class="card" aria-labelledby="bank-heading"><div class="companion-card-head"><p class="eyebrow">SAFELY STORED</p><h2 id="bank-heading">Bank</h2><p id="bank-summary" class="field-help"></p></div><p id="bank-status" class="field-help" role="status"></p><div id="bank" class="table-scroll"></div>
+  <div class="notification-actions"><button id="previous" class="button secondary" type="button" hidden>Previous page</button><button id="next" class="button secondary" type="button" hidden>Next page</button></div>
+ </section>
+ </div>
+ <section id="guild-card" class="card" hidden aria-labelledby="guild-heading"><div class="companion-bank-heading"><div><p class="eyebrow">BETTER TOGETHER</p><h2 id="guild-heading">Guild</h2></div><span id="guild-tag" class="companion-guild-tag" hidden></span></div>
   <p id="guild-status" class="field-help" role="status"></p>
   <div id="guild-join" hidden><p id="guild-join-help" class="field-help"></p>
    <ul id="guild-invites" class="companion-guild-list" aria-label="Guild invitations"></ul><ul id="guild-my-apps" class="companion-guild-list" aria-label="Your applications"></ul>
@@ -25,30 +45,23 @@
     <form id="guild-apply-form"><h3>Apply to a guild</h3><label for="guild-apply-name">Guild name or tag</label><input id="guild-apply-name" maxlength="24" required autocomplete="off"><button class="button secondary" type="submit" data-guild>Apply</button></form>
    </div></div>
   <div id="guild-home" hidden><p id="guild-summary" class="field-help"></p>
+   <div class="companion-guild-grid"><div class="companion-guild-col">
    <section aria-labelledby="guild-motd-heading"><h3 id="guild-motd-heading">Message of the day</h3><p id="guild-motd" class="companion-description"></p><button id="guild-motd-edit" type="button" class="button secondary" data-guild hidden>Edit MOTD</button>
     <form id="guild-motd-form" hidden><label for="guild-motd-input">New message of the day</label><textarea id="guild-motd-input" rows="3"></textarea><div class="notification-actions"><button class="button primary" type="submit" data-guild>Save MOTD</button><button id="guild-motd-cancel" type="button" class="button secondary" data-guild>Cancel</button></div></form></section>
    <section aria-labelledby="guild-goal-heading"><h3 id="guild-goal-heading">Weekly goal</h3><progress id="guild-goal-meter" max="1" value="0"></progress><p id="guild-goal-text" class="field-help"></p></section>
-   <section aria-labelledby="guild-roster-heading"><h3 id="guild-roster-heading">Roster</h3><div id="guild-roster" class="table-scroll"></div></section>
-   <section aria-labelledby="guild-chat-heading"><h3 id="guild-chat-heading">Guild chat</h3><ul id="guild-chat" class="companion-guild-chat" aria-live="polite"></ul>
+      <section aria-labelledby="guild-chat-heading"><h3 id="guild-chat-heading">Guild chat</h3><ul id="guild-chat" class="companion-guild-chat" aria-live="polite"></ul>
     <form id="guild-chat-form"><label for="guild-chat-input" class="companion-sr-only">Message your guild</label><input id="guild-chat-input" maxlength="240" autocomplete="off" placeholder="Say something to your guild…"><button class="button primary" type="submit" data-guild>Send</button></form></section>
+   </div><div class="companion-guild-col">
+   <section aria-labelledby="guild-roster-heading"><h3 id="guild-roster-heading">Roster</h3><div id="guild-roster" class="table-scroll"></div></section>
    <section aria-labelledby="guild-treasury-heading"><h3 id="guild-treasury-heading">Treasury</h3><p id="guild-treasury-summary" class="field-help"></p>
     <form id="guild-donate-form"><span id="guild-donate-presets"></span><label for="guild-donate-amount" class="companion-sr-only">Custom amount</label><input id="guild-donate-amount" type="number" min="1" step="1" placeholder="Custom"><button class="button secondary" type="submit" data-guild>Donate</button></form>
     <div id="guild-upgrades" class="notification-actions"></div><div id="guild-ledger" class="table-scroll"></div></section>
    <section id="guild-manage" hidden aria-labelledby="guild-manage-heading"><h3 id="guild-manage-heading">Officer tools</h3>
     <form id="guild-invite-form"><label for="guild-invite-name">Invite by character name</label><input id="guild-invite-name" maxlength="24" required autocomplete="off"><button class="button secondary" type="submit" data-guild>Invite</button></form>
     <div id="guild-applications"></div></section>
+   </div></div>
    <div class="notification-actions"><button id="guild-leave" type="button" class="button secondary" data-guild>Leave guild</button><button id="guild-disband" type="button" class="button secondary" data-guild hidden>Disband guild</button></div>
   </div>
   <section aria-labelledby="guild-board-heading"><h3 id="guild-board-heading">Leaderboard</h3><div id="guild-board" class="table-scroll"></div></section>
  </section>
- <section class="card"><h2>Inventory</h2><p id="inventory-summary" class="field-help"></p>
-  <div id="inventory-tabs" class="companion-tabs" role="tablist" aria-label="Item categories"></div>
-  <div id="inventory" class="table-scroll" role="tabpanel" tabindex="0"></div></section>
- <section id="shops-card" class="card" hidden aria-labelledby="shops-heading"><h2 id="shops-heading">Diaper Atelier &amp; Clothes Emporium</h2>
-  <p id="shops-summary" class="field-help"></p><div id="shops" class="companion-shops"></div>
-  <p id="shop-status" class="field-help" role="status"></p><section id="shop-result" class="companion-reveal" hidden aria-label="Your last roll"></section>
- </section>
- <section class="card"><h2>Bank</h2><p id="bank-summary" class="field-help"></p><p id="bank-status" class="field-help" role="status"></p><div id="bank" class="table-scroll"></div>
-  <div class="notification-actions"><button id="previous" class="button secondary" type="button" hidden>Previous page</button><button id="next" class="button secondary" type="button" hidden>Next page</button></div>
- </section>
-</section></main><script type="module" src="./app.js"></script></body></html>
+</div></div></main><script type="module" src="./app.js"></script></body></html>

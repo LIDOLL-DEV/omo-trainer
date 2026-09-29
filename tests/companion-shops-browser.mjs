@@ -76,7 +76,7 @@ try{
  // ── Both shops show price, odds and the destination character ──
  assert.equal(await page.$eval('#shops-card',n=>n.hidden),false);
  assert.deepEqual(await page.$$eval('#shops h3',n=>n.map(e=>e.textContent)),['Diaper Atelier','Clothes Emporium']);
- assert.deepEqual(await page.$$eval('#shops .button',n=>n.map(e=>e.textContent)),['Roll for 3 LiDollCoins','Roll for 3 LiDollCoins']);
+ assert.deepEqual(await page.$$eval('#shops .button.primary',n=>n.map(e=>e.textContent)),['Roll for 3 LiDollCoins','Roll for 3 LiDollCoins']); // Coin rolls; each shop's diamond roll sits beneath its coin roll.
  assert.match(await page.$eval('#shops-summary',n=>n.textContent),/Shop Tester’s bank · 512 free slots/);
  assert.equal(await page.$$eval('.companion-odds',n=>n[0].children.length),5);
  assert.equal(await page.$eval('#shop-result',n=>n.hidden),true,'nothing to reveal before the first roll');

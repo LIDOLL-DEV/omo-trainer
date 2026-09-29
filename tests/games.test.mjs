@@ -5,7 +5,7 @@ import {createGamesRoute} from '../server/games.mjs';
 
 test('Games redirects fixed names to the configured HTTPS bot, never forwarding credentials or return URLs',()=>{
   const route=createGamesRoute('/tracker/',{LIDOLLBOT_PUBLIC_ORIGIN:'https://bot.example',NODE_ENV:'production'});
-  for(const game of ['diapers','hangman','touhou','balldrop','clothes','littlepottchi'])for(const method of ['GET','HEAD']){
+  for(const game of ['hangman','touhou','balldrop'])for(const method of ['GET','HEAD']){
     const headers={},res={setHeader:(key,value)=>headers[key]=value,writeHead:(status,values)=>{res.status=status;Object.assign(headers,values);},end:()=>{}};
     assert.equal(route({method,url:`/tracker/games/${game}?token=secret&returnTo=https://evil.example`,headers:{cookie:'secret'}},res,`/tracker/games/${game}`),true);
     assert.equal(res.status,303);assert.equal(headers.Location,`https://bot.example/${game}/login`);assert.equal(headers['Cache-Control'],'no-store');assert.equal(headers['Set-Cookie'],undefined);
@@ -13,6 +13,7 @@ test('Games redirects fixed names to the configured HTTPS bot, never forwarding 
   const res={setHeader(){},writeHead(status){this.status=status;},end(){}};
   route({method:'POST'},res,'/tracker/games/touhou');assert.equal(res.status,405);
   route({method:'GET'},res,'/tracker/games/unknown');assert.equal(res.status,404);
+  for(const game of ['diapers','clothes','littlepottchi']){route({method:'GET'},res,`/tracker/games/${game}`);assert.equal(res.status,404,`${game} moved into the LidollQuest-Companion`);}
   assert.equal(route({method:'GET'},res,'/tracker/api/me'),false);
 });
 test('Games origin rejects insecure production, embedded credentials and arbitrary paths',()=>{
@@ -22,7 +23,8 @@ test('Games origin rejects insecure production, embedded credentials and arbitra
 test('Games shell offers each tab with link instructions and a cached offline module',()=>{
   const read=path=>readFileSync(new URL(`../${path}`,import.meta.url),'utf8'),html=read('index.html');
   assert.doesNotMatch(html,/games\/touhou|Touhou/); // Touhou Trader is no longer listed; its redirect stays for old bookmarks.
-  for(const game of ['diapers','hangman','balldrop','clothes','littlepottchi'])assert.match(html,new RegExp(`href="./games/${game}" target="_blank" rel="noopener noreferrer"`));
+  for(const game of ['hangman','balldrop'])assert.match(html,new RegExp(`href="./games/${game}" target="_blank" rel="noopener noreferrer"`));
+  assert.doesNotMatch(html,/games\/(diapers|clothes|littlepottchi)|<h2>(Diaper Atelier|Littlepottchi|Clothes Emporium)<\/h2>/); // Atelier and Emporium live in the companion now; Littlepottchi is retired.
   assert.match(html,/LidollQuest-Companion/);assert.match(html,/href="\.\/companion\/"/); // The companion is a same-origin tracker page, so it is not a bot redirect and does not open cross-origin.
   const bot=createGamesRoute('/tracker/',{LIDOLLBOT_PUBLIC_ORIGIN:'https://bot.example',NODE_ENV:'production'}),probe={setHeader(){},writeHead(status){probe.status=status;},end(){}};
   bot({method:'GET'},probe,'/tracker/games/lidollquest-companion');assert.equal(probe.status,404,'the companion must not redirect to a bot route nothing serves');
