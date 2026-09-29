@@ -392,3 +392,18 @@ The companion supports Equip on carried gear and Unequip on worn gear. Curses, f
 ## Companion guild card (2026-09-28)
 
 `companion/index.html` has a `#guild-card` between Character and Inventory; `companion/app.js` renders it in `renderGuild()` from the companion snapshot's `guild*` keys and writes through `guildAct()`, which wraps the same `request('zones/action', …)` + `run()` pattern as sales and equipment, adds `companion:true` to every body, keeps guild errors on `#guild-status` (a rejected donation must not clear the sheet) and reloads on a stale-revision 409. Buttons carry `data-guild` so `controls()` disables them while a request is busy, and `data-locked` for unaffordable upgrades. Unsent chat, MOTD and invite drafts live in `guildDraft` and survive the 15-second refresh. Rank gating in the roster mirrors the server matrix (officers manage members; only the leader touches officers) but the server is the authority. No proxy, route, scope or CSP change: `server/quest-proxy.mjs` and `server/quest-account-api.mjs` are untouched. Styles are in `companion/style.css` under the guild comment; nothing reaches for `--accent`.
+
+
+## Companion Eat/Drink and item cards (2026-09-29)
+
+**Item cards.** Every item name in the inventory table, and every worn item name, is a `.companion-item-link` button that opens `#item-dialog`, a native `<dialog>` in `companion/index.html`.
+- `renderItemDialog()` in `companion/app.js` draws the card from `item.details`, which the quest service builds in `server/companion.mjs` `itemDetails()`. The card shows rarity, item level, rolled affixes, flags, stats and the online effect lines, as a port of `inv_item_stat_lines` and `inv_item_online_effect_lines`.
+- `dialogState` survives the 15-second refresh: `apply()` re-renders an open card, and `findItem()` follows a stack whose index moved.
+- The card closes on unlink, character change, `pagehide`, or any failed request, so the error message behind it stays readable.
+
+**Eat and Drink.** Consumables carry `consumable: true` and `use_label: 'Eat' | 'Drink'`, and are offered only when `capabilities.companionConsume` is true.
+- `consumeButton()` sends `companion_use` with `slot`, `item_id` and `equipment_version`, the same tokens Equip uses. It carries `data-equipment`, so it locks while busy and whenever `equipmentEditable` is false.
+- The reply's `sheet.last_use.lines` are the game's own Action Log lines. They show in the card and in `#status`.
+- No proxy, route, scope or CSP change was needed.
+
+**Styles.** Card styles live in `companion/style.css` under the item card comment. `#item-dialog` sets the rarity border by id, because the themes' `:root[data-theme] dialog` border would otherwise win.

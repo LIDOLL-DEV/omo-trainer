@@ -508,3 +508,22 @@ MommyBot character ownership: `node --test tests/quest-account-link.test.mjs tes
 ## Companion guild card (2026-09-28)
 
 `npm test` (`tests/companion.test.mjs`) asserts the guild card exists, that every guild write is a `zones/action` body through `guildBody()` with `companion:true`, and that the page still carries no bearer token, no `zones/inspect` call and no game-only navigation fields. With `PUPPETEER_MODULE` and `CHROME_PATH` set, `node tests/companion-guild-browser.mjs` drives the real card against a stubbed gateway: roster ranks and online dots, the officer-only tools, chat posting (and a draft surviving Refresh), a preset donation, a refused custom amount that leaves the card in place, MOTD editing, the leader view (upgrades locked by treasury balance, roster management buttons, no plain Leave), and the guildless view (invitation Join sends `guild_accept`, the create form upper-cases the tag). The server side is `node --test test/guilds.test.mjs` in the LiDollQuest service checkout.
+
+
+### Companion item card and Eat/Drink (2026-09-29)
+
+`node tests/companion-browser.mjs` (with `PUPPETEER_MODULE` and `CHROME_PATH`) now also checks that:
+- item names stay the first-cell text;
+- consumables get Drink/Eat beside Equip;
+- gear opens a card with its rarity line and affixes, and no effects block;
+- Escape closes the card;
+- a drink's card lists its stats and effects and fits a 390px phone;
+- Drink sends `companion_use` with the right slot, item, revision and equipment token;
+- the card then shows the returned lines and the new `×1` count;
+- the button locks when equipment is not editable.
+
+It writes `item-card-mobile.png` and `item-card-after-drink.png` next to the tab screenshots.
+
+On Windows, `PUPPETEER_MODULE=C:/Scripts/omo-trainer/node_modules/puppeteer-core/lib/puppeteer/puppeteer-core.js` and `CHROME_PATH="C:/Program Files/Google/Chrome/Application/chrome.exe"` work.
+
+Server side: `node --test test/companion-consume.test.mjs` in the quest service.

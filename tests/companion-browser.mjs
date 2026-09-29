@@ -29,6 +29,7 @@ const labels=page=>page.$$eval('#inventory-tabs button',nodes=>nodes.map(node=>n
 const counts=page=>page.$$eval('#inventory-tabs .companion-tab-count',nodes=>nodes.map(node=>Number(node.textContent)));
 const rows=page=>page.$$eval('#inventory tbody tr td:first-child',cells=>cells.map(cell=>cell.textContent));
 const descriptionReceipts=new Map();let loseDescriptionResponse=false;
+let actionHandler=null; // Set by the item card section: answers zones/action like the game server would.
 const selected=page=>page.$eval('#inventory-tabs [aria-selected="true"]',node=>node.id);
 
 try{
@@ -50,6 +51,7 @@ try{
       if(loseDescriptionResponse){loseDescriptionResponse=false;return void request.respond({status:503,contentType:'application/json',body:'{}'});}
       return void request.respond({status:200,contentType:'application/json',body:JSON.stringify(result)});
     }
+    if(url.includes('/api/lidollcoin/browser/zones/action')&&actionHandler)return void request.respond({status:200,contentType:'application/json',body:JSON.stringify(actionHandler(JSON.parse(request.postData())))}); // Eat/Drink replies with the updated companion sheet.
     if(url.includes('/api/lidollcoin/browser/zones'))return void request.respond({status:200,contentType:'application/json',body:JSON.stringify(snapshot)});
     return void request.continue();
   });
@@ -135,8 +137,40 @@ try{
     await page.setViewport({width:1280,height:1000});await page.screenshot({path:resolve(directory,`${theme}-desktop.png`),fullPage:true});
   }
 
+  // ── Item detail card and Eat/Drink (2026-09-29) ──
+  await page.evaluate(()=>{document.documentElement.dataset.theme='little-tracker';});
+  const milk={index:0,item_id:'bottle',name:'Milk Bottle',category:'food',is_drink:true,quantity:2,consumable:true,use_label:'Drink',
+   details:{desc:'A warm bottle of milk.',rarity:'uncommon',colour:'#5ec46e',ilvl:null,title:'',affixes:[],flags:['Diaper'],stats:[{label:'Thirst',value:'+167'},{label:'Wet Later',value:'+20'}],effects:['Wet: +5/turn for 4 turns'],sell:3}};
+  const blade={index:1,item_id:'iron_dagger',name:'Rusty dagger',category:'weapon',atk:7,equippable:true,details:{desc:'Sharp enough.',rarity:'rare',colour:'#6eb4ff',ilvl:12,title:'',affixes:[{label:'Crinkly',text:'Childish +2'}],flags:[],stats:[{label:'ATK',value:'+7'}],effects:[],sell:0}};
+  snapshot.capabilities={companionConsume:true};snapshot.sheet.equipmentEditable=true;snapshot.sheet.equipment_version='v1';snapshot.sheet.inventory=[milk,blade];
+  const sent=[];actionHandler=input=>{sent.push(input);snapshot.sheet.inventory=[{...milk,quantity:1},{...blade,index:1}];snapshot.sheet.last_use={at:1,item_id:'bottle',lines:['Used Milk Bottle. Restored 15 HP.','Hunger +20, Thirst +167.']};snapshot.sheet.equipment_version='v2';snapshot.character.revision=4;return snapshot;};
+  await page.click('#inventory-tab-all');await page.click('#reload');await page.waitForFunction(()=>document.querySelector('#inventory tbody tr .companion-item-link')?.textContent==='Milk Bottle');
+  assert.deepEqual(await rows(page),['Milk Bottle','Rusty dagger'],'item names stay the first-cell text');
+  assert.deepEqual(await page.$$eval('#inventory tbody tr td:last-child button',nodes=>nodes.map(n=>n.textContent)),['Drink','Equip'],'consumables get Drink/Eat beside Equip');
+  await page.click('#inventory tbody tr:nth-child(2) .companion-item-link');await page.waitForSelector('#item-dialog[open]');
+  assert.equal(await page.$eval('#item-dialog-name',n=>n.textContent),'Rusty dagger');assert.match(await page.$eval('#item-dialog-rarity',n=>n.textContent),/Rare · Item level 12/);
+  assert.match(await page.$eval('#item-dialog-affixes',n=>n.textContent),/Crinkly: Childish \+2/);assert.equal(await page.$eval('#item-dialog-effects-block',n=>n.hidden),true,'gear has no effects block');
+  await page.keyboard.press('Escape');await page.waitForFunction(()=>!document.querySelector('#item-dialog').open);
+  await page.click('#inventory tbody tr:first-child .companion-item-link');await page.waitForSelector('#item-dialog[open]');
+  assert.equal(await page.$eval('#item-dialog-kind',n=>n.textContent),'Drink · ×2');
+  assert.deepEqual(await page.$$eval('#item-dialog-stats dt',n=>n.map(x=>x.textContent)),['Thirst','Wet Later']);assert.deepEqual(await page.$$eval('#item-dialog-effects li',n=>n.map(x=>x.textContent)),['Wet: +5/turn for 4 turns']);
+  assert.match(await page.$eval('#item-dialog-extra',n=>n.textContent),/Sells for 3 LiDollCoins/);
+  await page.setViewport({width:390,height:844});await page.screenshot({path:resolve(directory,'item-card-mobile.png')});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'the item card fits a phone');
+  await page.setViewport({width:1280,height:1000});
+  await page.click('#item-dialog-actions .button.primary');await page.waitForFunction(()=>!document.querySelector('#item-dialog-result-block').hidden);
+  assert.equal(sent.length,1);assert.deepEqual({action:sent[0].action,slot:sent[0].slot,item_id:sent[0].item_id,equipment_version:sent[0].equipment_version,revision:sent[0].revision},{action:'companion_use',slot:0,item_id:'bottle',equipment_version:'v1',revision:3});
+  assert.deepEqual(await page.$$eval('#item-dialog-result li',n=>n.map(x=>x.textContent)),['Used Milk Bottle. Restored 15 HP.','Hunger +20, Thirst +167.'],'the card shows what the drink did');
+  assert.equal(await page.$eval('#item-dialog-kind',n=>n.textContent),'Drink · ×1','and the new quantity');
+  await page.screenshot({path:resolve(directory,'item-card-after-drink.png')});
+  await page.click('#item-dialog-close');await page.waitForFunction(()=>!document.querySelector('#item-dialog').open);
+  assert.match(await page.$eval('#status',n=>n.textContent),/Used Milk Bottle/);
+  snapshot.sheet.equipmentEditable=false;await page.click('#reload');await page.waitForFunction(()=>document.querySelector('#inventory tbody tr:first-child td:last-child button')?.disabled===true);
+  assert.equal(await page.$eval('#inventory tbody tr:first-child td:last-child button',n=>n.disabled),true,'Drink locks with equipment during combat or a pending turn');
+  actionHandler=null;snapshot.sheet.inventory=inventory;delete snapshot.capabilities;
+
   assert.deepEqual(errors,[],'the companion page must raise no script errors');
-  console.log('companion category tabs verified; screenshots in '+directory);
+  console.log('companion category tabs and item card verified; screenshots in '+directory);
 }finally{
   await browser?.close();
   await new Promise(done=>server.close(done));

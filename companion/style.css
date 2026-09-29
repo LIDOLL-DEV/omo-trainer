@@ -113,3 +113,26 @@
 /* Tablets and phones: the rail becomes a card above everything, and its jump links wrap into pills. */
 @media(max-width:64rem){.companion-layout{grid-template-columns:minmax(0,1fr);}.companion-rail{position:static;}.companion-nav{flex-direction:row;flex-wrap:wrap;gap:.35rem;}.companion-nav a{border:1px solid var(--border);border-radius:999px;padding:.35rem .8rem;font-size:12px;}}
 @media(max-width:38rem){.companion-page main{padding-inline:.75rem;}}
+
+/* ── Item detail card (2026-09-29): opened from any item name; tinted by the item's rarity like the roll reveal. ── */
+.companion-item-link{padding:0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;text-decoration:underline dotted var(--pink);text-underline-offset:3px;overflow-wrap:anywhere;}
+.companion-item-link:hover,.companion-item-link:focus-visible{color:var(--pink);}
+.companion-item-dialog{max-width:32rem;overflow-y:auto;}
+#item-dialog{border-left:.4rem solid var(--rarity,var(--pink));} /* The id outranks the themes' :root[data-theme] dialog border, so the rarity edge shows in every theme. */
+.companion-item-dialog>*{margin:0 0 .75rem;}
+.companion-item-dialog-head{display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem;}
+.companion-item-dialog-head h2{margin:.1rem 0;font-size:1.25rem;overflow-wrap:anywhere;}
+.companion-item-dialog-head p{margin:0;}
+.companion-item-dialog h3{margin:0 0 .4rem;font:10px/1.6 var(--mono);letter-spacing:1.6px;text-transform:uppercase;color:var(--pink);}
+.companion-item-flags{display:flex;flex-wrap:wrap;gap:.35rem;padding:0;list-style:none;}
+.companion-item-flag{padding:.1rem .55rem;border:1px solid var(--border);border-radius:999px;font-size:.75rem;font-weight:700;}
+.companion-item-flag.is-cursed{border-color:#e0405a;color:#e0405a;}
+.companion-item-affixes{padding:0;list-style:none;font-size:.9rem;}
+.companion-item-affixes li{margin:0 0 .2rem;}
+.companion-item-stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(8.5rem,1fr));gap:.4rem;}
+.companion-item-stat{padding:.35rem .55rem;border:1px solid var(--border);border-radius:.5rem;background:var(--panel);}
+.companion-item-stat dt{font-size:.7rem;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);}
+.companion-item-stat dd{margin:0;font-weight:700;font-variant-numeric:tabular-nums;}
+.companion-item-effects,.companion-item-result ul{margin:0;padding-left:1.1rem;font-size:.9rem;}
+.companion-item-result{padding:.6rem .75rem;border:1px dashed var(--pink);border-radius:.6rem;}
+.companion-item-dialog .notification-actions .button{width:auto;margin-top:0;} /* styles.css stretches dialog primaries full width; keep the card's buttons side by side. */

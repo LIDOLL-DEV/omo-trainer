@@ -31,7 +31,7 @@ async function request(route,input,query='') { // Every companion read and sale 
   return value;
 }
 function unlinked(message){ // A missing or revoked wallet connection is an invitation to link, never an error message.
-  resetDescription();
+  resetDescription();closeItemDialog(); // Private item details never outlive the connection.
   characters=[];bank=null;snapshot=null;active='';page=0;csrf='';pendingRoll=null;guildDraft={motd:false,chat:'',invite:''};clearSheet();$('#bank').replaceChildren();$('#wallet').textContent='';$('#content').hidden=true;$('#link').hidden=false;$('#status').textContent=message;
 }
 function controls(){
@@ -51,7 +51,7 @@ async function run(work){ // One request at a time, so a sale and a page change 
   try{await work();}
   catch(error){
     if([401,403].includes(error.status))unlinked('Your LiDollQuest connection ended. Connect again to view your character.');
-    else {$('#status').textContent=error.message;clearSheet();bank=null;snapshot=null;renderBank();}
+    else {closeItemDialog();$('#status').textContent=error.message;clearSheet();bank=null;snapshot=null;renderBank();} // Close the item card so the message behind it is readable.
   }finally{busy=false;controls();}
 }
 function clearSheet(){
@@ -83,7 +83,7 @@ function renderSheet(){
     }
     host.append(text('h3',title,'companion-stats-heading'),facts);
   }
-  for(const slot of sheet.equipment??[]){const row=text('div',undefined,'companion-slot'+(slot.item_id?'':' is-empty'));row.append(text('span',slot.slot.replace(/_/g,' '),'companion-slot-name'),text('strong',slot.name));if(slot.item?.cursed)row.append(text('span','Cursed','field-help'));if(slot.item_id)row.append(equipmentButton('Unequip','companion_unequip',slot.slot,slot.item_id,slot.locked));$('#equipment').append(row);}
+  for(const slot of sheet.equipment??[]){const row=text('div',undefined,'companion-slot'+(slot.item_id?'':' is-empty')),name=text('strong');name.append(slot.item_id&&slot.item?itemLink(slot.name,{kind:'slot',slot:slot.slot,item_id:slot.item_id}):document.createTextNode(slot.name??''));row.append(text('span',slot.slot.replace(/_/g,' '),'companion-slot-name'),name);if(slot.item?.cursed)row.append(text('span','Cursed','field-help'));if(slot.item_id)row.append(equipmentButton('Unequip','companion_unequip',slot.slot,slot.item_id,slot.locked));$('#equipment').append(row);} // A worn item's name opens its detail card too.
   renderInventory();
   const tush=sheet.tush;$('#tush-status').append(text('strong',tush.name),text('p',tush.status));
   if(tush.is_diaper){const meter=document.createElement('progress');meter.max=tush.capacity;meter.value=tush.wet_absorbed+tush.mess_absorbed;meter.setAttribute('aria-label','Absorption used');$('#tush-status').append(meter,text('p',tush.wet_absorbed+' wet + '+tush.mess_absorbed+' messy / '+tush.capacity+' capacity','field-help'));}
@@ -160,8 +160,9 @@ function renderInventory(){ // Draws the tab strip and the rows of the selected 
     for(const key of ['atk','def','bulk','childish','hp_restore','mp_restore'])if(item[key]!==undefined)detail.push(key.replace(/_/g,' ')+': '+item[key]);
     if(item.cursed)detail.push('Cursed');
     if((item.quantity??item.count??1)>1)detail.push('Quantity: '+(item.quantity??item.count));
-    row.append(text('td',item.name,'wrap'),text('td',drink(item)?'Drink':shortLabels[item.category]??'Item'),text('td',detail.join(' · ')||'—','wrap')); // Bottled food reads "Drink" and unknown categories read "Item", exactly as the game's own grids label them.
-    const action=text('td');if(item.equippable)action.append(equipmentButton('Equip','companion_equip',item.index,item.item_id,false));row.append(action);
+    const nameCell=text('td',undefined,'wrap');nameCell.append(itemLink(item.name,{kind:'bag',index:item.index,item_id:item.item_id})); // The name opens the item's detail card.
+    row.append(nameCell,text('td',drink(item)?'Drink':shortLabels[item.category]??'Item'),text('td',detail.join(' · ')||'—','wrap')); // Bottled food reads "Drink" and unknown categories read "Item", exactly as the game's own grids label them.
+    const action=text('td');if(item.equippable)action.append(equipmentButton('Equip','companion_equip',item.index,item.item_id,false));if(canConsume(item))action.append(consumeButton(item,false));row.append(action);
     body.append(row);
   }
   panel.append(table);
@@ -202,16 +203,86 @@ function sellButton(entry,item){
   }));
   return button;
 }
-function equipmentButton(label,action,slot,itemId,locked){
+function equipmentButton(label,action,slot,itemId,locked,done){
  const button=text('button',label,'button small secondary');button.type='button';button.dataset.equipment='true';
  button.dataset.locked=String(Boolean(locked)||!snapshot.sheet.equipmentEditable);button.disabled=busy||button.dataset.locked==='true';
  button.title=locked?'This cursed item cannot be removed.':!snapshot.sheet.equipmentEditable?'Finish combat or the current game action before changing equipment.':label+' this item';
  button.addEventListener('click',()=>void run(async()=>{
   const result=await request('zones/action',{action,character_id:snapshot.character.id,revision:snapshot.character.revision,controller:controller(),request_id:crypto.randomUUID(),slot,item_id:itemId,equipment_version:snapshot.sheet.equipment_version});
-  apply(result);$('#status').textContent=label==='Equip'?'Item equipped.':'Item unequipped.';
+  apply(result);$('#status').textContent=label==='Equip'?'Item equipped.':'Item unequipped.';done?.(); // `done`: the detail card closes once the item has moved.
  }));
  return button;
 } // Revision and source tokens prevent an old inventory row from selecting a different item after a game action.
+
+// ── Eat / Drink (2026-09-29): the server applies the game's own food and drink rules (companion_use), to the same loadout Equip edits. ──
+const canConsume=item=>item?.consumable===true&&snapshot?.capabilities?.companionConsume===true; // Older game servers simply never offer the button.
+function consumeButton(item,primary){
+ const verb=item.use_label==='Drink'?'Drink':'Eat',button=text('button',verb,'button small '+(primary?'primary':'secondary'));button.type='button';button.dataset.equipment='true'; // data-equipment: controls() locks it while any request runs.
+ button.dataset.locked=String(!snapshot.sheet.equipmentEditable);button.disabled=busy||button.dataset.locked==='true';
+ button.title=snapshot.sheet.equipmentEditable?verb+' '+item.name:'Finish combat or the current game action first.';
+ button.addEventListener('click',()=>void run(async()=>{
+  const result=await request('zones/action',{action:'companion_use',character_id:snapshot.character.id,revision:snapshot.character.revision,controller:controller(),request_id:crypto.randomUUID(),slot:item.index,item_id:item.item_id,equipment_version:snapshot.sheet.equipment_version});
+  apply(result);
+  const lines=snapshot.sheet?.last_use?.lines??[];
+  $('#status').textContent=lines.join(' ')||(verb==='Drink'?'Drank ':'Ate ')+item.name+'.'; // The same Action Log lines the game would print.
+  if(dialogState?.ref.item_id===item.item_id){dialogState.result=lines;renderItemDialog();} // The open card shows what happened, and the new quantity.
+ }));
+ return button;
+}
+
+// ── Item detail card: every stat and effect the game's own item card shows, for bag and worn items alike. ──
+let dialogState=null; // {ref:{kind:'bag',index,item_id}|{kind:'slot',slot,item_id}, last:item, result:lines|null}; survives the 15-second refresh.
+function itemLink(label,ref){
+ const button=text('button',label,'companion-item-link');button.type='button';button.title='Show details for '+label;
+ button.addEventListener('click',()=>openItemDialog(ref));
+ return button;
+}
+function findItem(ref){ // The same row after a refresh; a stack that moved keeps its item id.
+  const sheet=snapshot?.sheet;if(!sheet)return null;
+  if(ref.kind==='slot'){const slot=(sheet.equipment??[]).find(s=>s.slot===ref.slot&&s.item_id===ref.item_id);return slot?.item?{...slot.item,worn:true,locked:slot.locked,slot:slot.slot}:null;}
+  const bag=sheet.inventory??[];return bag.find(i=>i.index===ref.index&&i.item_id===ref.item_id)??bag.find(i=>i.item_id===ref.item_id)??null;
+}
+function openItemDialog(ref){
+  const item=findItem(ref);if(!item)return;
+  dialogState={ref,last:item,result:null};renderItemDialog();
+  const dialog=$('#item-dialog');if(!dialog.open)dialog.showModal();
+}
+function closeItemDialog(){dialogState=null;const dialog=$('#item-dialog');if(dialog.open)dialog.close();}
+function renderItemDialog(){
+  if(!dialogState)return;
+  const found=findItem(dialogState.ref),item=found??dialogState.last,details=item.details??{},gone=!found;
+  if(found){dialogState.last=found;dialogState.ref={...dialogState.ref,index:found.index??dialogState.ref.index};} // Follow the stack if earlier rows were eaten.
+  const dialog=$('#item-dialog');dialog.style.setProperty('--rarity',details.colour||'var(--pink)');
+  const quantity=item.quantity??item.count??1;
+  $('#item-dialog-kind').textContent=(item.worn?'Worn · ':'')+(drink(item)?'Drink':shortLabels[item.category]??'Item')+(item.quantity!==undefined||quantity>1?' · ×'+quantity:''); // Stacks always show their count, so ×1 reads as "your last one".
+  $('#item-dialog-name').textContent=item.name;
+  $('#item-dialog-rarity').textContent=[capital(details.rarity??'common'),details.ilvl?'Item level '+details.ilvl:'',details.title??''].filter(Boolean).join(' · ');
+  const flags=$('#item-dialog-flags');flags.replaceChildren();
+  for(const flag of details.flags??[])flags.append(text('li',flag,'companion-item-flag'+(flag==='Cursed'?' is-cursed':'')));
+  flags.hidden=!flags.childNodes.length;
+  $('#item-dialog-desc').textContent=details.desc||'';$('#item-dialog-desc').hidden=!details.desc; // Plain text only.
+  const affixes=$('#item-dialog-affixes');affixes.replaceChildren();
+  for(const affix of details.affixes??[]){const li=text('li');li.append(text('strong',affix.label),text('span',affix.text?': '+affix.text:''));affixes.append(li);}
+  affixes.hidden=!affixes.childNodes.length;
+  const stats=$('#item-dialog-stats');stats.replaceChildren();
+  for(const row of details.stats??[]){const tile=text('div',undefined,'companion-item-stat');tile.append(text('dt',row.label),text('dd',row.value));stats.append(tile);}
+  stats.hidden=!stats.childNodes.length;
+  const effects=$('#item-dialog-effects');effects.replaceChildren();
+  for(const line of details.effects??[])effects.append(text('li',line));
+  $('#item-dialog-effects-block').hidden=!effects.childNodes.length;
+  $('#item-dialog-extra').textContent=[gone?'None left in your bag.':'',details.sell>0?'Sells for '+coins(details.sell)+' LiDollCoins':''].filter(Boolean).join(' · ');
+  const result=$('#item-dialog-result');result.replaceChildren();for(const line of dialogState.result??[])result.append(text('li',line));
+  $('#item-dialog-result-block').hidden=!dialogState.result?.length;
+  const actions=$('#item-dialog-actions');actions.replaceChildren();
+  if(!gone&&snapshot?.sheet?.available){
+    if(item.worn)actions.append(equipmentButton('Unequip','companion_unequip',item.slot,item.item_id,item.locked,closeItemDialog));
+    else{if(canConsume(item))actions.append(consumeButton(item,true));if(item.equippable)actions.append(equipmentButton('Equip','companion_equip',item.index,item.item_id,false,closeItemDialog));}
+  }
+  const close=text('button','Close','button small secondary');close.type='button';close.addEventListener('click',closeItemDialog);actions.append(close);
+}
+$('#item-dialog-close').addEventListener('click',closeItemDialog);
+$('#item-dialog').addEventListener('click',event=>{if(event.target===event.currentTarget)closeItemDialog();}); // A click on the backdrop closes the card.
+$('#item-dialog').addEventListener('close',()=>{dialogState=null;}); // Escape closes it natively.
 function renderShops(){ // Diaper Atelier and Clothes Emporium: rolls go to the selected character's bank.
   const shops=snapshot?.shops,host=$('#shops');host.replaceChildren();
   $('#shops-card').hidden=!shops||!snapshot.character;
@@ -320,6 +391,7 @@ function apply(value){
   $('#content').hidden=!characters.length;$('#link').hidden=true;
   $('#status').textContent=characters.length?'':'This account has no LiDollQuest characters yet. Start one in the game and come back.';
   renderBank();renderSheet();renderShops();renderGuild();syncNav();
+  if(dialogState&&!snapshot.sheet?.available)closeItemDialog();else renderItemDialog(); // An open item card follows the refresh.
 }
 async function load(){
   const session=await request('session');
@@ -328,7 +400,7 @@ async function load(){
   const snapshot=await request('zones',null,'?view=companion'+(active?'&character_id='+encodeURIComponent(active):'')+'&bank_page='+page);
   apply(snapshot);
 }
-$('#character').addEventListener('change',()=>{resetDescription();active=$('#character').value;page=0;clearSheet();bank=null;snapshot=null;renderBank();$('#status').textContent='Loading character…';$('#bank-status').textContent='';$('#shop-status').textContent='';void run(load);});
+$('#character').addEventListener('change',()=>{resetDescription();closeItemDialog();active=$('#character').value;page=0;clearSheet();bank=null;snapshot=null;renderBank();$('#status').textContent='Loading character…';$('#bank-status').textContent='';$('#shop-status').textContent='';void run(load);});
 $('#inventory-tabs').addEventListener('keydown',event=>{ // Arrow keys cycle tabs the way the game's shoulder buttons do, wrapping at both ends.
   const step={ArrowLeft:-1,ArrowRight:1,Home:'first',End:'last'}[event.key];if(step===undefined)return;
   const index=groups.findIndex(group=>group.id===tab);
@@ -338,7 +410,7 @@ $('#inventory-tabs').addEventListener('keydown',event=>{ // Arrow keys cycle tab
 $('#reload').addEventListener('click',()=>{$('#bank-status').textContent='';void run(load);});
 $('#previous').addEventListener('click',()=>{page=Math.max(0,(bank?.page??0)-1);void run(load);});
 $('#next').addEventListener('click',()=>{page=(bank?.page??0)+1;void run(load);});
-window.addEventListener('pagehide',()=>{resetDescription();csrf='';snapshot=null;bank=null;clearSheet();renderBank();}); // Never retain a CSRF token or private character details after leaving the page.
+window.addEventListener('pagehide',()=>{resetDescription();closeItemDialog();csrf='';snapshot=null;bank=null;clearSheet();renderBank();}); // Never retain a CSRF token or private character details after leaving the page.
 window.addEventListener('online',()=>void run(load));
 void run(load);
 
