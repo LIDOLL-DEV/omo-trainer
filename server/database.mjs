@@ -260,7 +260,7 @@ export function openDatabase(filename = databasePath(), options = {}) { // Opens
   const questSocial=createQuestSocial(db,friends,{presence:(owner,input)=>gamePresence.act(owner,input)});
   const activity=createActivity(db,{now:options.now,canSee:row=>social.activityVisible(row)});
   const gamePresence=createGamePresence(db,friends,{now:options.now,activity}); // The tracker remains the authority for the friend audience and notification preferences.
-  const socialCore=createSocial(db,friends,{now:options.now,activity,stickerInfo});
+  const socialCore=createSocial(db,friends,{now:options.now,activity,stickerInfo,supporter:id=>economy.supporter(id)}); // Supporter stars come from the market's purchase windows.
   const stickerGifts=createStickerGifts(socialCore,economy); // Comments/messages with a sticker move it to the recipient's inventory first.
   const social={...socialCore,comment:stickerGifts.comment,sendMessage:stickerGifts.sendMessage,stickers:stickerGifts.owned,reconcileStickers:stickerGifts.reconcile};
   const notifications=createNotifications(db,records,{...options.notifications,areFriends:friends.accepted,activity});

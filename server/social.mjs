@@ -6,7 +6,7 @@ const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex
 const key=value=>{if(typeof value!=='string'||! /^[A-Za-z0-9_-]{1,80}$/.test(value))fail(400,'Invalid post, friend or request.');return value;};
 const text=(value,max,optional=false)=>{if(typeof value!=='string'||value.length>max||(!optional&&!value.trim())||/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value))fail(400,`Use ${optional?'up to':'1 to'} ${max} characters.`);return value.trim();};
 const cursor=value=>{if(value===undefined||value===null||value==='')return Number.MAX_SAFE_INTEGER;const n=Number(value);if(!Number.isSafeInteger(n)||n<1)fail(400,'Invalid page cursor.');return n;};
-export function createSocial(db,friends,{now=Date.now,activity,stickerInfo=id=>({id,name:'Sticker',url:null})}={}) {
+export function createSocial(db,friends,{now=Date.now,activity,stickerInfo=id=>({id,name:'Sticker',url:null}),supporter=()=>false}={}) {
  db.exec(`CREATE TABLE IF NOT EXISTS social_posts(seq INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT NOT NULL UNIQUE,owner TEXT NOT NULL REFERENCES participants(id),request_id TEXT NOT NULL,request_hash TEXT NOT NULL,body TEXT NOT NULL,audience TEXT NOT NULL CHECK(audience IN ('friends','public')),created INTEGER NOT NULL,deleted INTEGER,UNIQUE(owner,request_id));
  CREATE INDEX IF NOT EXISTS social_post_owner ON social_posts(owner,seq);
  CREATE TABLE IF NOT EXISTS social_pictures(id TEXT PRIMARY KEY,post_id TEXT NOT NULL REFERENCES social_posts(id),position INTEGER NOT NULL,alt TEXT NOT NULL,width INTEGER NOT NULL,height INTEGER NOT NULL,data BLOB NOT NULL);
@@ -60,7 +60,7 @@ export function createSocial(db,friends,{now=Date.now,activity,stickerInfo=id=>(
    return {id:randomUUID(),alt,width:result.info.width,height:result.info.height,data:result.data};
   }catch(error){if(error.status)throw error;fail(400,'This picture could not be read. Choose a still JPEG, PNG or WebP picture.');}
  } // Decode and re-encode every image: no original metadata, filenames, SVG, animation or remote URLs are stored.
- function avatarInfo(owner){const row=db.prepare('SELECT version FROM social_profiles WHERE owner=? AND data IS NOT NULL').get(owner);return row?{avatarVersion:row.version}:{};}
+ function avatarInfo(owner){const row=db.prepare('SELECT version FROM social_profiles WHERE owner=? AND data IS NOT NULL').get(owner);return {...(row?{avatarVersion:row.version}:{}),...(supporter(owner)?{supporter:true}:{})};} // Every identity payload (authors, friends, members, the session participant) carries the supporter star through this one helper.
  function profile(owner){requireUser(owner);const row=db.prepare('SELECT version,data IS NOT NULL AS has_picture FROM social_profiles WHERE owner=?').get(owner);return {version:row?.version??null,avatarVersion:row?.has_picture?row.version:null};}
  function avatar(owner,participantId,version,moderator=false){if(moderator)requireAdmin(owner);else requireUser(owner);key(participantId);if(!moderator&&!active(participantId))fail(404,'Profile picture not found.');const row=db.prepare('SELECT data,version FROM social_profiles WHERE owner=? AND data IS NOT NULL').get(participantId);if(!row||(version&&row.version!==version))fail(404,'Profile picture not found.');return row.data;}
  async function saveProfile(owner,input,permit) {

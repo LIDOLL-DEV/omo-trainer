@@ -168,6 +168,6 @@ export function createAdminStore(db, records, growthChart,{onRecordWrite=()=>{}}
       db.exec('COMMIT'); return result.summary;
     } catch(error) { db.exec('ROLLBACK'); throw error; }
   }
-  return {access,requireAdmin,isGamemaster,bootstrap,reminder,saveReminder,users,updateUser,dataset,charts,previewImport,importData,
+  return {access,requireAdmin,isGamemaster,bootstrap,reminder,saveReminder,users,updateUser,dataset,charts,previewImport,importData,audit, // audit is exported so store grants/refunds leave the same attributable trail.
     auditList(actor) { requireAdmin(actor); return db.prepare('SELECT * FROM admin_audit ORDER BY created_at DESC,rowid DESC LIMIT 100').all(); }};
 }

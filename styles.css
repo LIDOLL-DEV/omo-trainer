@@ -1953,6 +1953,19 @@ html.photo-viewing { overflow:hidden; }
 .feed-filters select { width:100%; }
 .post-pills { display:flex;align-items:center;justify-content:flex-end; } /* badge + audience pill on one row */
 .post-pills .badge-247 { margin-right:4px; }
+.badge-supporter { display:inline-block;margin-left:4px;color:#f2b632;font-size:1em;line-height:1;vertical-align:baseline;text-shadow:0 0 4px rgba(242,182,50,.55); } /* ★ beside supporter names for 30 days after a diamond pack */
+.member-heading .badge-supporter { font-size:1.4em;align-self:center; }
+/* Diamond store card: pack radio grid, PayPal button slot and purchase history. */
+.store-packs { display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0; }
+.store-pack { display:grid;gap:4px;padding:12px;border:2px solid var(--line, rgba(0,0,0,.12));border-radius:14px;cursor:pointer;background:var(--card-2, transparent); }
+.store-pack.selected { border-color:var(--pink);box-shadow:0 0 0 2px rgba(255,150,200,.35); }
+.store-pack input { position:absolute;opacity:0;pointer-events:none; }
+.store-pack-name { font-weight:800; }
+.store-pack-diamonds { font-size:.9em;opacity:.85; }
+.store-pack-price { font-size:1.1em;font-weight:800; }
+.store-paypal { max-width:420px;margin:8px 0; }
+.store-history { padding-left:18px;font-size:.9em; }
+.donate-card .donate-link { display:inline-block;margin-top:6px;font-weight:800; } /* About page "Support Little Log" button */
 /* Sticker gifts in comments and messages: picker grid, chosen chip and the posted sticker. */
 .sticker-picker { margin:6px 0; }
 .sticker-choices { display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;margin-top:8px;max-height:240px;overflow-y:auto; }

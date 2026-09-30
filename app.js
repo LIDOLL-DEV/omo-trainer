@@ -13,6 +13,7 @@ import { trainingState, protocolDay, protocolFor, protocolRecord, cooldownRemain
 import './lib/reminder.js';
 import './lib/theme.js';
 import './lib/economy.js';
+import './lib/store.js'; // Diamond packs (PayPal) on the Stickers & market page.
 import './lib/games.js';
 import {openFriendShare} from './lib/friends.js';
 import './lib/social.js';

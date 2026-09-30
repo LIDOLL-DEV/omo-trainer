@@ -527,3 +527,9 @@ It writes `item-card-mobile.png` and `item-card-after-drink.png` next to the tab
 On Windows, `PUPPETEER_MODULE=C:/Scripts/omo-trainer/node_modules/puppeteer-core/lib/puppeteer/puppeteer-core.js` and `CHROME_PATH="C:/Program Files/Google/Chrome/Application/chrome.exe"` work.
 
 Server side: `node --test test/companion-consume.test.mjs` in the quest service.
+
+## Diamond store (2026-09-30)
+
+`node --test tests/store.test.mjs` runs a fake PayPal (OAuth, orders, capture, webhook verification, refunds) against the real API router with real session cookies. It covers catalogue validation, the disabled state (503s, hidden card), server-side pricing and `custom_id`, single capture with retry and cross-account refusal, amount/currency mismatch refusal, declined instruments, `ORDER_ALREADY_CAPTURED` recovery, pending-order expiry, webhook signature rejection, webhook fulfilment and replay, refund/dispute clawbacks with shortfall, supporter extension and expiry on the fake clock, admin grant/refund audit rows and the `supporter_until` wallet field.
+
+Manual sandbox pass (needs `PAYPAL_*` set to sandbox credentials): open Stickers & market, pick a pack, pay with a sandbox buyer, confirm the wallet count rises and the star appears beside your name on a post; refund the capture from the sandbox dashboard and confirm the diamonds leave and the star disappears within a minute; try the admin **Diamond store** tab grant and refund with a reason and check the Activity log. With the store disabled the card must be absent and the strict CSP header unchanged.

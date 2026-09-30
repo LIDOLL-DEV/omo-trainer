@@ -407,3 +407,11 @@ The companion supports Equip on carried gear and Unequip on worn gear. Curses, f
 - No proxy, route, scope or CSP change was needed.
 
 **Styles.** Card styles live in `companion/style.css` under the item card comment. `#item-dialog` sets the rarity border by id, because the themes' `:root[data-theme] dialog` border would otherwise win.
+
+## Diamond store and supporter star (2026-09-30)
+
+`server/store.mjs` sells diamond packs through PayPal Checkout (Orders API v2) inside `market.sqlite`; `server/paypal-client.mjs` is the only code that talks to PayPal. The browser (`lib/store.js`, card on the Stickers & market page) names a SKU and the server prices it, creates the order, captures it and credits diamonds with `adjust()` exactly once per purchase. Webhooks (`api/store/paypal-webhook`, registered before the session checks in `server/api.mjs`) are the fallback fulfilment and the only source of refunds, reversals and disputes; every event is signature-verified through PayPal's API and replay-guarded by event id. Paid diamonds bypass the per-app `diamondDailyLimit` on purpose. Staff use the admin **Diamond store** tab (`admin/store.js`, routes `admin/store*`) for manual grants and PayPal refunds; both need a reason and write audit rows. Configuration is the `PAYPAL_*` block in `deploy/tracker.env.example`; the store, its CSP hosts and its routes are all off until the credentials exist. Read STORE_DESIGN.md before touching prices, statuses or the webhook handler.
+
+Every fulfilled pack extends `store_supporters.until` by 30 days. `social.avatarInfo()` adds `supporter:true` while that window is open, so authors, comment authors, friends, member profiles and the session participant all carry it; `lib/avatar.js#createIdentity` and `supporterStar()` draw the star. The `lidollcoin/v1/wallet` route adds `supporter_until` for LiDollQuest, whose server puts `supporter:true` on peers and `supporter_until` on the snapshot; the game prefixes the star in `online_peer_label()`. Clawbacks remove 30 days again and never push a diamond balance below zero (the shortfall lands in `clawback_short`).
+
+The About page carries a **Support Little Log** card with a PayPal donate link (`hosted_button_id=REPLACE_ME` until the real hosted button id is pasted in; the game homepage uses the same link). It is a plain external link, so the CSP needs nothing for it.

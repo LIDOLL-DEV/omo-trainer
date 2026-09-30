@@ -10,13 +10,17 @@ import { createApi } from '../server/api.mjs';
 import { createLogin } from '../server/login.mjs';
 import { stickerCatalog } from '../server/sticker-catalog.mjs';
 import { createGamesRoute } from '../server/games.mjs';
+import { paypalConfig, createPayPalClient } from '../server/paypal-client.mjs';
+import { storeCatalog } from '../server/store.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const host = process.env.HOST ?? '127.0.0.1';
 const port = Number(process.env.PORT ?? 4173);
 const base = process.env.BASE_PATH ?? '/tracker/';
 if (!/^\/(?:[a-zA-Z0-9_-]+\/)*$/.test(base)) throw new Error('BASE_PATH must start and end with / and contain only simple path segments.');
-const database = openDatabase();
+const paypal = paypalConfig(); // PAYPAL_CLIENT_ID + PAYPAL_CLIENT_SECRET switch the diamond store on; everything else stays untouched when they are absent.
+const store = { catalog: storeCatalog(), publicOrigin: process.env.PUBLIC_ORIGIN ?? '', paypal: paypal.enabled ? createPayPalClient(paypal) : null };
+const database = openDatabase(databasePath(), { store });
 const stopAnalysisWorker=startAnalysisWorker(databasePath()); // One supervised background worker shares the private durable report queue.
 const login = createLogin(database, base);
 const api = createApi(database, login);
@@ -45,7 +49,8 @@ const files = new Map([
   ['lib/prediction.js', 'text/javascript; charset=utf-8'], ['lib/prediction-view.js', 'text/javascript; charset=utf-8'],
   ['lib/reward-celebration.js', 'text/javascript; charset=utf-8'],
   ['lib/notifications.js', 'text/javascript; charset=utf-8'],
-  ['lib/economy.js', 'text/javascript; charset=utf-8'],
+  ['lib/economy.js', 'text/javascript; charset=utf-8'], ['lib/store.js', 'text/javascript; charset=utf-8'],
+  ['admin/store.js','text/javascript; charset=utf-8'],
   ['lib/reminder.js', 'text/javascript; charset=utf-8'],
   ['lib/theme.js', 'text/javascript; charset=utf-8'], ['theme-init.js', 'text/javascript; charset=utf-8'], ['themes.css', 'text/css; charset=utf-8'],
   ['index.html', 'text/html; charset=utf-8'], ['styles.css', 'text/css; charset=utf-8'],
@@ -63,10 +68,15 @@ const files = new Map([
   ['icons/icon-512.png', 'image/png'], ['icons/maskable-512.png', 'image/png'], ['icons/apple-touch-icon.png', 'image/png'],
 ]);
 
+const paypalHost = paypal.environment === 'live' ? 'https://www.paypal.com' : 'https://www.sandbox.paypal.com'; // The buttons SDK, its iframes and its XHR all come from this one host.
+const csp = paypal.enabled
+  ? `default-src 'self'; script-src 'self' ${paypalHost}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.paypalobjects.com; connect-src 'self' ${paypalHost}; frame-src ${paypalHost}; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'` // PayPal's SDK injects inline styles for its button frame; nothing else in the policy loosens.
+  : "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'";
+
 export const server = http.createServer(requestBoundary(async (request, response) => { // Serves only the public allowlist, never source tools, backups, or project documentation.
   response.setHeader('X-Content-Type-Options', 'nosniff');
   response.setHeader('Referrer-Policy', 'no-referrer');
-  response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'");
+  response.setHeader('Content-Security-Policy', csp);
   response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   const pathname = new URL(request.url, 'http://localhost').pathname;
   if (games(request, response, pathname)) return;
@@ -92,7 +102,7 @@ export const server = http.createServer(requestBoundary(async (request, response
   } catch { response.writeHead(503); response.end('App asset unavailable'); }
 }));
 
-const rewardTimer=setInterval(()=>{database.economy.tryFlush();database.social.reconcileStickers();},30000);rewardTimer.unref(); // Resume reward delivery even without another record submission.
+const rewardTimer=setInterval(()=>{database.economy.tryFlush();database.social.reconcileStickers();try{database.economy.store('expirePending');}catch{ /* Market outages retry on the next tick. */ }},30000);rewardTimer.unref(); // Abandoned PayPal checkouts are marked cancelled after three days. // Resume reward delivery even without another record submission.
 server.on('close', () => {stopAnalysisWorker();clearInterval(rewardTimer);database.close();}); // Flushes and closes the persistent connection during controlled shutdowns and tests.
 server.requestTimeout = 15000;
 server.headersTimeout = 10000;

@@ -9,6 +9,14 @@ function send(response, status, body) { // Keeps every authenticated response ou
   response.end(JSON.stringify(body));
 }
 
+async function rawBody(request, limit) { // Bounded text read for PayPal webhooks, which carry no session and are verified by signature instead.
+  if (!/^application\/json(?:;|$)/i.test(request.headers['content-type'] ?? '')) throw new ApiError(415, 'Send application/json.');
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of request) { size += chunk.length; if (size > limit) throw new ApiError(413, 'Webhook body is too large.'); chunks.push(chunk); }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 async function body(request, limit = 256 * 1024) { // Bounds uploads before parsing and rejects content types that could be submitted by an ordinary cross-site form.
   if (!/^application\/json(?:;|$)/i.test(request.headers['content-type'] ?? '')) throw new ApiError(415, 'Send application/json.');
   const chunks = [];
@@ -29,6 +37,7 @@ export function createApi(database, login) { // Resolves each app session to an 
       if(route.startsWith('ai-reports/v1/'))return reportApi(database,login,request,response,route.slice('ai-reports/v1/'.length));
       if(route.startsWith('lidollcoin/browser/'))return coinBrowserApi(database,login,request,response,route.slice('lidollcoin/browser/'.length));
       if(route.startsWith('lidollcoin/v1/'))return coinApi(database,login,request,response,route.slice('lidollcoin/v1/'.length));
+      if(route==='store/paypal-webhook'){if(request.method!=='POST')throw new ApiError(405,'Method not allowed.');return send(response,200,await database.economy.store('webhook',request.headers,await rawBody(request,65536)));} // PayPal posts here without cookies; store.mjs verifies the transmission signature before acting.
       const origin = request.headers.origin;
       if (request.headers['sec-fetch-site'] === 'cross-site' || (origin && origin !== login.origin)) throw new ApiError(403, 'This origin is not allowed.');
       if (!['GET', 'POST'].includes(request.method)) throw new ApiError(405, 'Method not allowed.');
@@ -116,6 +125,9 @@ export function createApi(database, login) { // Resolves each app session to an 
           if (request.method === 'GET') return send(response,200,database.admin.reminder(key));
           if (request.method === 'POST') return send(response,200,database.admin.saveReminder(participant.id,await body(request,16384),key));
         }
+        if (route === 'admin/store' && request.method === 'GET') return send(response, 200, { purchases: database.economy.store('list'), catalog: database.economy.store('catalog'), users: database.admin.users(participant.id).map(u => ({ id: u.id, label: u.label })) }); // Owner labels let staff read the purchase list without a second lookup.
+        if (route === 'admin/store/grant' && request.method === 'POST') { const input = await body(request, 4096); const result = database.economy.store('grant', input?.owner, input); database.admin.audit(participant.id, 'store-grant', String(input?.owner ?? ''), { sku: input?.sku, reason: input?.reason, purchase: result.id }); return send(response, 200, result); } // Manual fulfilment (payment links, keys, goodwill) is audited like every other admin action.
+        if (route === 'admin/store/refund' && request.method === 'POST') { const input = await body(request, 4096); const result = await database.economy.store('refund', input); database.admin.audit(participant.id, 'store-refund', result.owner, { purchase: result.id, reason: input?.reason }); return send(response, 200, result); } // PayPal refund first, then the diamond clawback.
         if (route === 'admin/users' && request.method === 'GET') return send(response, 200, { users: database.admin.users(participant.id), csrf, participant });
         if (route === 'admin/charts' && request.method === 'GET') return send(response, 200, database.admin.charts(participant.id));
         if (route === 'admin/data' && request.method === 'GET') return send(response, 200, database.admin.dataset(participant.id, scope));
@@ -128,6 +140,9 @@ export function createApi(database, login) { // Resolves each app session to an 
       if (route === 'economy' && request.method === 'GET') return send(response, 200, { participant, csrf, ...database.economy.snapshot(participant.id) });
       if(route==='login-bonuses'&&request.method==='GET') {const query=new URL(request.url,login.origin).searchParams;return send(response,200,{participant,...database.economy.loginBonuses(participant.id,{from:query.get('from')??undefined,to:query.get('to')??undefined})});} // This calendar is private; external wallet tokens cannot read it.
       if (route === 'economy' && request.method === 'POST') return send(response, 200, database.economy.act(participant.id, await body(request, 4096)));
+      if (route === 'store' && request.method === 'GET') return send(response, 200, { participant, csrf, ...database.economy.store('view', participant.id) }); // Catalogue, own purchases and the supporter window; PayPal secrets never appear here.
+      if (route === 'store/order' && request.method === 'POST') return send(response, 200, await database.economy.store('begin', participant.id, await body(request, 4096))); // The browser names a pack; the server prices it.
+      if (route === 'store/capture' && request.method === 'POST') return send(response, 200, await database.economy.store('capture', participant.id, await body(request, 4096))); // Verified capture credits diamonds exactly once.
       if (route === 'growth-chart' && request.method === 'GET') return send(response, 200, { participant, csrf, ...database.growthChart(participant.id) });
       if (route === 'growth-chart' && request.method === 'POST') return send(response, 200, { participant, ...database.saveGrowthChart(participant.id, await body(request)) });
       if (route === 'session' && request.method === 'GET') return send(response, 200, { participant, csrf, role: session.role, records: database.records(participant.id) });

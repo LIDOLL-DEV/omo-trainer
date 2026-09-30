@@ -23,7 +23,7 @@ export function createRewardBridge(science,filename,options={}) { // A durable o
     try {
       if(market.prepare('PRAGMA user_version').get().user_version>9)throw Error('The market database requires a newer service version.');
       market.exec('PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=100;');
-      store=createEconomy(market,options.stickerCatalog,id=>Boolean(science.prepare('SELECT p.id FROM participants p LEFT JOIN participant_access a ON a.participant_id=p.id WHERE p.id=? AND COALESCE(a.disabled,0)=0').get(id)),options.stickerDuplicates);
+      store=createEconomy(market,options.stickerCatalog,id=>Boolean(science.prepare('SELECT p.id FROM participants p LEFT JOIN participant_access a ON a.participant_id=p.id WHERE p.id=? AND COALESCE(a.disabled,0)=0').get(id)),options.stickerDuplicates,options.store); // options.store carries the PayPal client and catalogue from serve.mjs.
       market.exec('PRAGMA user_version=9');
       return store;
     } catch(error) {market.close();market=null;store=null;throw error;}
@@ -114,6 +114,13 @@ export function createRewardBridge(science,filename,options={}) { // A durable o
       let economy;try {economy=open();}catch {throw Object.assign(new Error('Stickers are temporarily unavailable. Try again shortly.'),{status:503});}
       return economy.gifts[method](...args);
     },
+    store(method,...args) { // Diamond pack purchases live in market.sqlite only; the PayPal calls inside never touch scientific records.
+      tryFlush();
+      let economy;try {economy=open();}catch {throw Object.assign(new Error('The diamond store is temporarily unavailable. Try again shortly.'),{status:503});}
+      return economy.store[method](...args);
+    },
+    supporter(owner) {try {return open().store.supporter(owner);}catch {return false;}}, // Name badges must never fail a social page when the market is down.
+    supporterUntil(owner) {try {return open().store.supporterUntil(owner);}catch {return null;}},
     backup(destination) {open();return backup(market,destination);},
     close() {market?.close();market=null;store=null;},
   };

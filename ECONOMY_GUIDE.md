@@ -127,3 +127,7 @@ does not consume an external application's daily earning allowance.
 ## Reward limits
 
 New record performance payouts have a 50-coin per-change ceiling and a 250-coin per-account UTC daily budget. Sticker entitlements have a 20-per-day budget; chart stars have a 50-per-day budget. Limits use server time, persist across restarts, and leave scientific data intact. Existing balances and pending entitlements are preserved. Welcome/check-in bonuses use separate policies. Old or zero-award receipts cannot collect again tomorrow. See [SECURITY_ROLLOUT.md](SECURITY_ROLLOUT.md).
+
+## Diamond store (2026-09-30)
+
+Diamonds can now be bought with real money through PayPal on the Stickers & market page. The store shares `adjust()` and the ledger (`Diamond pack purchase`, `Diamond pack refund`, `Diamond pack dispute`, `Staff diamond grant`) and lives in `store_purchases`, `store_events` and `store_supporters` inside `market.sqlite`. Coins are not sold; the 50-coin exchange is the only route from bought diamonds to coins. Back up the market database before changing packs. Details: STORE_DESIGN.md.

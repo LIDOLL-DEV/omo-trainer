@@ -273,6 +273,10 @@ call is required. It is separate from client-issued credits and does not consume
 the client's daily earning allowance. Existing tracker accounts keep their funds.
 See [ECONOMY_GUIDE.md](ECONOMY_GUIDE.md) for eligibility and delivery behavior.
 
+## Supporter star
+
+`GET wallet?client_id=lidollquest` includes `supporter_until`: epoch milliseconds while the account's diamond-pack supporter window is open (30 days per pack, extended by repeat purchases), otherwise `null`. The quest server shows a star beside such players; other apps may ignore the field.
+
 ## Server authority for credits and refunds
 
 Every HTTP `credit` or `refund`, for coins, stars and diamonds, now requires `X-Reward-Signature`. A user grant alone can read and debit its owner's wallet. Missing/invalid reward proofs return HTTP 403 with `reward_authorization`; reconnecting cannot fix a missing server key. Configure `LIDOLLCOIN_REWARD_KEYS` only on the tracker and the matching per-client key only on the trusted game/bot server. Never embed it in a downloadable game, browser or public app registration.

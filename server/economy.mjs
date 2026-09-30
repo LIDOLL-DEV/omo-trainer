@@ -2,12 +2,13 @@ import {createCoinApiStore} from './coin-api-store.mjs';
 import {randomInt,randomUUID,createHash} from 'node:crypto';
 import {stickerCatalog} from './sticker-catalog.mjs';
 import {mergeStickerDuplicates} from './sticker-duplicates.mjs';
+import {createStore} from './store.mjs';
 
 const BANK='stickerbank', MAX=2147483647;
 function fail(status,message) { throw Object.assign(new Error(message),{status}); } // Return safe actionable errors through the authenticated API.
 function integer(value,min=1,max=MAX) { if(!Number.isSafeInteger(value)||value<min||value>max) fail(400,'Use a whole number within the allowed range.'); return value; }
 
-export function createEconomy(db,catalog=stickerCatalog(),enabled=()=>true,duplicates) { // Market balances and exchanges use their own database, separate from scientific records.
+export function createEconomy(db,catalog=stickerCatalog(),enabled=()=>true,duplicates,storeOptions={}) { // Market balances and exchanges use their own database, separate from scientific records.
   db.exec(`
     CREATE TABLE IF NOT EXISTS sticker_types(id TEXT PRIMARY KEY,name TEXT NOT NULL,url TEXT NOT NULL,active INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS sticker_aliases(alias TEXT PRIMARY KEY REFERENCES sticker_types(id),canonical TEXT NOT NULL REFERENCES sticker_types(id));
@@ -239,5 +240,6 @@ export function createEconomy(db,catalog=stickerCatalog(),enabled=()=>true,dupli
       db.exec('COMMIT');return reward?{...reward,quantity:1}:null;
     } catch(error) {db.exec('ROLLBACK');throw error;}
   }
-  return {awardRecord,awardPerformanceBonus,awardDailyBonus,awardRegistration,awardStars,snapshot,act,recordReward,coins:createCoinApiStore(db,wallet,adjust,enabled),gifts:{give:giveSticker,settle:settleSticker,return:returnSticker,unsettled:unsettledStickers,owned:ownedStickers}};
+  const store=createStore(db,{wallet,adjust,enabled,...storeOptions}); // Paid diamond packs share adjust() and the ledger; PayPal facts are verified in store.mjs before any credit.
+  return {awardRecord,awardPerformanceBonus,awardDailyBonus,awardRegistration,awardStars,snapshot,act,recordReward,store,coins:createCoinApiStore(db,wallet,adjust,enabled),gifts:{give:giveSticker,settle:settleSticker,return:returnSticker,unsettled:unsettledStickers,owned:ownedStickers}};
 }
