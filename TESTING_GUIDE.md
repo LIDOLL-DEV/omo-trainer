@@ -545,3 +545,5 @@ Pick a coin pack and the "Send as a gift to" picker appears with your accepted f
 ### Existing store migration (2026-09-30)
 
 `node --test tests/store-migration.test.mjs tests/store.test.mjs tests/economy.test.mjs` checks historical diamond-only and pre-gifting purchase tables, forced-failure rollback and retry, exact receipt preservation, unchanged balances/history/supporter expiry, pending-order completion, fulfilled-order replay protection, refunds, new coin packs and gifts, repeated initialization, and SQLite integrity/foreign keys. Run `node --test tests/auth.test.mjs tests/registration.test.mjs tests/combined-login.test.mjs` separately when diagnosing sign-in. A market 503 is not evidence that the auth process has stopped: check the latest journal start and discovery endpoint for the issuer actually configured on that installation.
+
+Store API tests use a fixed purchase clock. When several purchases share a timestamp, their UUIDs break the listing sort tie; locate the purchase by its returned ID before asserting its note or status. The admin grant/refund test checks both the unchanged diamond grant and the refunded coin grant this way.

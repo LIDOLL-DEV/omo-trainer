@@ -128,7 +128,11 @@ test('admins grant packs manually and refund through PayPal with audit rows; mem
  assert.ok(db.economy.supporter(alice.id));assert.equal(db.economy.snapshot(alice.id).history[0].reason,'Diamond pack grant');
  const coinGrant=await staff.post('admin/store/grant',{owner:alice.id,sku:'vault',reason:'Stream giveaway'});assert.equal(coinGrant.body.asset,'coins');assert.equal(db.economy.snapshot(alice.id).wallet.coins,13050);
  const coinBack=await staff.post('admin/store/refund',{id:coinGrant.body.id,reason:'Wrong winner'});assert.equal(coinBack.status,200);assert.equal(db.economy.snapshot(alice.id).wallet.coins,50,'coin clawbacks come out of the coin balance');assert.equal(db.economy.snapshot(alice.id).wallet.diamonds,100);
- const listing=await staff.get('admin/store');assert.equal(listing.body.purchases[0].note,'Payment link #7');assert.equal(listing.body.users.find(u=>u.id===alice.id).label,'Alice');
+ const listing=await staff.get('admin/store');assert.equal(listing.status,200);
+ const listedGrant=listing.body.purchases.find(purchase=>purchase.id===grant.body.id),listedCoinGrant=listing.body.purchases.find(purchase=>purchase.id===coinGrant.body.id); // The fixed clock ties timestamps, so identify receipts by ID rather than random UUID sort order.
+ assert.ok(listedGrant);assert.equal(listedGrant.note,'Payment link #7');assert.equal(listedGrant.status,'fulfilled');
+ assert.ok(listedCoinGrant);assert.equal(listedCoinGrant.note,'Staff refund: Wrong winner');assert.equal(listedCoinGrant.status,'refunded');
+ assert.equal(listing.body.users.find(u=>u.id===alice.id).label,'Alice');
  const paid=await a.post('store/order',{sku:'handful',requestId:'req-00000030'});await a.post('store/capture',{id:paid.body.id});
  const refund=await staff.post('admin/store/refund',{id:paid.body.id,reason:'Player asked within an hour'});assert.equal(refund.status,200);assert.equal(refund.body.status,'refunded');
  assert.ok(pp.calls.some(c=>/\/v2\/payments\/captures\/CAP-1\/refund$/.test(c.url)),'PayPal was asked to refund the capture');
