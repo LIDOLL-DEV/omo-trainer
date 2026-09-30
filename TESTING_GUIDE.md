@@ -541,3 +541,7 @@ On the Stickers page a completed sandbox purchase must open the "Thank you!" dia
 ### Coin gifts (2026-09-30)
 
 Pick a coin pack and the "Send as a gift to" picker appears with your accepted friends; diamond packs hide it. After the sandbox payment the thank-you dialog says the coins went to the friend and that you both wear the star; the friend's Recent purchases lists it as received, and both names show ★ on posts. Refund it in the sandbox dashboard and confirm the friend's coins drop and both stars vanish. `tests/store.test.mjs` covers stranger refusal, diamond refusal, self-gift refusal, request-id binding, both stars and the two-sided clawback.
+
+### Existing store migration (2026-09-30)
+
+`node --test tests/store-migration.test.mjs tests/store.test.mjs tests/economy.test.mjs` checks historical diamond-only and pre-gifting purchase tables, forced-failure rollback and retry, exact receipt preservation, unchanged balances/history/supporter expiry, pending-order completion, fulfilled-order replay protection, refunds, new coin packs and gifts, repeated initialization, and SQLite integrity/foreign keys. Run `node --test tests/auth.test.mjs tests/registration.test.mjs tests/combined-login.test.mjs` separately when diagnosing sign-in. A market 503 is not evidence that the auth process has stopped: check the latest journal start and discovery endpoint for the issuer actually configured on that installation.

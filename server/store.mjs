@@ -31,13 +31,27 @@ export function storeCatalog(source=process.env.STORE_CATALOG){ // Validate the 
 }
 
 export function createStore(db,{wallet,adjust,enabled=()=>true,canGift=()=>false,paypal=null,catalog=DEFAULT_CATALOG,publicOrigin='',now=Date.now,log=console.warn}={}){ // canGift(buyer,recipient): the tracker answers with its friendship table. // Diamond pack purchases inside market.sqlite; PayPal is the only payment rail, staff grants are the manual fallback.
- db.exec(`CREATE TABLE IF NOT EXISTS store_purchases(id TEXT PRIMARY KEY,owner TEXT NOT NULL REFERENCES economy_wallets(owner),recipient TEXT REFERENCES economy_wallets(owner),request_id TEXT,order_id TEXT UNIQUE,sku TEXT NOT NULL,asset TEXT NOT NULL CHECK(asset IN ('diamonds','coins')),amount INTEGER NOT NULL CHECK(amount>0),price_cents INTEGER NOT NULL CHECK(price_cents>=0),currency TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('pending','fulfilled','refunded','disputed','failed','cancelled')),capture_id TEXT,payer_id TEXT,clawback_short INTEGER NOT NULL DEFAULT 0,note TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
-  CREATE INDEX IF NOT EXISTS store_purchase_owner ON store_purchases(owner,created_at);
+ const purchaseSchema="(id TEXT PRIMARY KEY,owner TEXT NOT NULL REFERENCES economy_wallets(owner),recipient TEXT REFERENCES economy_wallets(owner),request_id TEXT,order_id TEXT UNIQUE,sku TEXT NOT NULL,asset TEXT NOT NULL CHECK(asset IN ('diamonds','coins')),amount INTEGER NOT NULL CHECK(amount>0),price_cents INTEGER NOT NULL CHECK(price_cents>=0),currency TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('pending','fulfilled','refunded','disputed','failed','cancelled')),capture_id TEXT,payer_id TEXT,clawback_short INTEGER NOT NULL DEFAULT 0,note TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL)"; // Shared definition for fresh installs and the historical diamond-only table upgrade.
+ db.exec('BEGIN IMMEDIATE');
+ try{
+  db.exec('CREATE TABLE IF NOT EXISTS store_purchases'+purchaseSchema);
+  const columns=new Set(db.prepare('PRAGMA table_info(store_purchases)').all().map(column=>column.name));
+  if(columns.has('diamonds')){ // Old releases required diamonds on every insert; rebuild so coin packs can use asset/amount instead.
+   db.exec('CREATE TABLE store_purchases_upgrade'+purchaseSchema);
+   db.exec(`INSERT INTO store_purchases_upgrade(id,owner,recipient,request_id,order_id,sku,asset,amount,price_cents,currency,status,capture_id,payer_id,clawback_short,note,created_at,updated_at)
+    SELECT id,owner,${columns.has('recipient')?'recipient':'NULL'},request_id,order_id,sku,'diamonds',diamonds,price_cents,currency,status,capture_id,payer_id,clawback_short,note,created_at,updated_at FROM store_purchases;
+    DROP TABLE store_purchases;ALTER TABLE store_purchases_upgrade RENAME TO store_purchases;`); // Copy receipts only: balances, ledger entries, webhook receipts and supporter windows never replay.
+  }else if(!columns.has('recipient')){
+   db.exec('ALTER TABLE store_purchases ADD COLUMN recipient TEXT REFERENCES economy_wallets(owner)'); // Upgrade installations with currency packs but no gifting yet.
+  }
+  db.exec(`CREATE INDEX IF NOT EXISTS store_purchase_owner ON store_purchases(owner,created_at);
   CREATE UNIQUE INDEX IF NOT EXISTS store_purchase_request ON store_purchases(owner,request_id) WHERE request_id IS NOT NULL;
   CREATE INDEX IF NOT EXISTS store_purchase_capture ON store_purchases(capture_id);
   CREATE INDEX IF NOT EXISTS store_purchase_recipient ON store_purchases(recipient,created_at);
   CREATE TABLE IF NOT EXISTS store_events(id TEXT PRIMARY KEY,type TEXT NOT NULL,purchase_id TEXT,received_at TEXT NOT NULL);
-  CREATE TABLE IF NOT EXISTS store_supporters(owner TEXT PRIMARY KEY REFERENCES economy_wallets(owner),until INTEGER NOT NULL);`); // Idempotent: adds tables beside the existing wallet without changing the market schema version.
+  CREATE TABLE IF NOT EXISTS store_supporters(owner TEXT PRIMARY KEY REFERENCES economy_wallets(owner),until INTEGER NOT NULL);`); // Build indexes only after the columns they reference exist.
+  db.exec('COMMIT');
+ }catch(error){db.exec('ROLLBACK');throw error;} // Failed upgrades leave the original purchase table intact for a safe retry.
  const stamp=()=>new Date(now()).toISOString(); // Row timestamps follow the injectable clock so tests can move time.
  const pack=sku=>catalog.find(p=>p.sku===sku)??fail(400,'Choose a diamond pack.','unknown_sku');
  const row=id=>db.prepare('SELECT * FROM store_purchases WHERE id=?').get(id);

@@ -159,3 +159,7 @@ The 30-second reward timer calls `store.expirePending()`, which marks checkouts 
 ## Tests
 
 `tests/store.test.mjs` runs a fake PayPal HTTP server (OAuth, create order, capture, webhook verification, refund) against `createApi` with real session cookies. It covers: catalogue and disabled state, server-side pricing, capture that credits diamonds and supporter days once, retry and cross-account idempotency, amount/currency mismatch refusal, webhook signature rejection, webhook fallback fulfilment, refund and dispute clawback with shortfall recording, supporter expiry, admin grant/refund audit rows, and the `supporter_until` wallet field.
+
+## Existing store upgrades
+
+Opening the market automatically upgrades diamond-only purchase rows to `asset=diamonds` and `amount=<original diamonds>`, and adds nullable `recipient` for pre-gifting installations. The purchase table rebuild and its indexes commit in one transaction; failed upgrades roll back for retry. Purchase IDs, order/capture IDs, statuses, request IDs, notes and timestamps survive. Wallet balances, ledger entries, webhook receipts and supporter expiry are not replayed or reset. This also runs with PayPal disabled because the store is initialized with the market. Deploy the updated tracker service through the normal backup/update workflow; no manual database reset or auth-service change is needed.
