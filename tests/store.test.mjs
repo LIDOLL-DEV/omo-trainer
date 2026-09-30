@@ -49,10 +49,11 @@ const captureEvent=(id,o,type='PAYMENT.CAPTURE.COMPLETED',extra={})=>({id,event_
 test('catalogue validation rejects free, duplicate or mixed-currency packs and accepts a clean override',()=>{
  assert.equal(storeCatalog(undefined),DEFAULT_CATALOG);
  assert.throws(()=>storeCatalog('nope'));assert.throws(()=>storeCatalog('[]'));
- assert.throws(()=>storeCatalog(JSON.stringify([{sku:'a',name:'A',diamonds:1,price_cents:0,currency:'USD'}])));
- assert.throws(()=>storeCatalog(JSON.stringify([{sku:'a',name:'A',diamonds:1,price_cents:99,currency:'USD'},{sku:'a',name:'B',diamonds:2,price_cents:199,currency:'USD'}])));
- assert.throws(()=>storeCatalog(JSON.stringify([{sku:'a',name:'A',diamonds:1,price_cents:99,currency:'USD'},{sku:'b',name:'B',diamonds:2,price_cents:199,currency:'EUR'}])));
- assert.deepEqual(storeCatalog(JSON.stringify([{sku:'mini',name:'Mini',diamonds:3,price_cents:99,currency:'EUR',extra:true}])),[{sku:'mini',name:'Mini',diamonds:3,price_cents:99,currency:'EUR'}]);
+ assert.throws(()=>storeCatalog(JSON.stringify([{sku:'a',name:'A',asset:'diamonds',amount:1,price_cents:0,currency:'USD'}])));
+ assert.throws(()=>storeCatalog(JSON.stringify([{sku:'a',name:'A',asset:'stars',amount:1,price_cents:99,currency:'USD'}])),'stars are earned, never sold');
+ assert.throws(()=>storeCatalog(JSON.stringify([{sku:'a',name:'A',asset:'diamonds',amount:1,price_cents:99,currency:'USD'},{sku:'a',name:'B',asset:'coins',amount:2,price_cents:199,currency:'USD'}])));
+ assert.throws(()=>storeCatalog(JSON.stringify([{sku:'a',name:'A',asset:'diamonds',amount:1,price_cents:99,currency:'USD'},{sku:'b',name:'B',asset:'coins',amount:2,price_cents:199,currency:'EUR'}])));
+ assert.deepEqual(storeCatalog(JSON.stringify([{sku:'mini',name:'Mini',asset:'coins',amount:300,price_cents:99,currency:'EUR',extra:true}])),[{sku:'mini',name:'Mini',asset:'coins',amount:300,price_cents:99,currency:'EUR'}]);
 });
 
 test('a disabled store hides itself, refuses orders and webhooks, and leaves supporter lookups false',()=>fixture(async({alice,as,webhook,db})=>{
@@ -72,15 +73,17 @@ test('a purchase is priced by the server, captured once, credits diamonds, grant
  assert.deepEqual((await a.post('store/order',{sku:'pouch',requestId:'req-00000001'})).body,order.body,'the same request id returns the same order');
  assert.equal((await a.post('store/order',{sku:'chest',requestId:'req-00000001'})).status,409,'a reused request id cannot switch packs');
  assert.equal((await b.post('store/capture',{id:order.body.id})).status,404,'another account cannot capture it');
- const receipt=await a.post('store/capture',{id:order.body.id});assert.equal(receipt.status,200);assert.equal(receipt.body.status,'fulfilled');assert.equal(receipt.body.diamonds,15);assert.equal(receipt.body.balance,15);
+ const receipt=await a.post('store/capture',{id:order.body.id});assert.equal(receipt.status,200);assert.equal(receipt.body.status,'fulfilled');assert.equal(receipt.body.asset,'diamonds');assert.equal(receipt.body.amount,15);assert.equal(receipt.body.balance,15);assert.deepEqual(receipt.body.wallet,{coins:50,stars:0,diamonds:15},'the 50-coin welcome bonus is already there');
  assert.equal(receipt.body.supporter_until,Date.parse('2026-10-01T12:00:00Z')+SUPPORTER_DAYS*86400000);
  assert.deepEqual((await a.post('store/capture',{id:order.body.id})).body,receipt.body,'capture retries return the same receipt');
  assert.equal(db.economy.snapshot(alice.id).wallet.diamonds,15);assert.equal(pp.calls.filter(c=>/capture$/.test(c.url)).length,1,'a fulfilled row never asks PayPal again');
  assert.equal(db.economy.snapshot(alice.id).history[0].reason,'Diamond pack purchase');
  assert.equal(db.social.avatarInfo(alice.id).supporter,true);assert.equal(db.social.avatarInfo(bob.id).supporter,undefined);
  assert.equal((await a.get('social/session')).body.participant.supporter,true,'the session participant carries the star');
- const second=await a.post('store/order',{sku:'handful',requestId:'req-00000002'});await a.post('store/capture',{id:second.body.id});
- assert.equal(db.economy.supporterUntil(alice.id),Date.parse('2026-10-01T12:00:00Z')+2*SUPPORTER_DAYS*86400000,'a second pack extends the window');
+ const second=await a.post('store/order',{sku:'purse',requestId:'req-00000002'});const coins=await a.post('store/capture',{id:second.body.id});
+ assert.equal(coins.body.asset,'coins');assert.equal(coins.body.amount,1000);assert.equal(coins.body.balance,1050,'coin packs credit the coin balance (on top of the welcome bonus)');assert.equal(pp.orders.get(second.body.order_id).unit.amount.value,'1.99');
+ assert.equal(db.economy.snapshot(alice.id).wallet.coins,1050);assert.equal(db.economy.snapshot(alice.id).wallet.diamonds,15,'the diamond balance is untouched by a coin pack');assert.equal(db.economy.snapshot(alice.id).history[0].reason,'Coin pack purchase');
+ assert.equal(db.economy.supporterUntil(alice.id),Date.parse('2026-10-01T12:00:00Z')+2*SUPPORTER_DAYS*86400000,'a second pack (of either currency) extends the window');
  advance(61*86400000);assert.equal(db.economy.supporterUntil(alice.id),null);assert.equal(db.social.avatarInfo(alice.id).supporter,undefined,'the star expires on its own');
  assert.equal((await a.get('store')).body.purchases.length,2);assert.ok(!('payer_id' in (await a.get('store')).body.purchases[0]),'buyers never see payer ids');
 }));
@@ -121,8 +124,10 @@ test('admins grant packs manually and refund through PayPal with audit rows; mem
  const a=as(alice),staff=as(admin);
  assert.equal((await a.get('admin/store')).status,403);assert.equal((await a.post('admin/store/grant',{owner:alice.id,sku:'hoard',reason:'x'})).status,403);
  assert.equal((await staff.post('admin/store/grant',{owner:alice.id,sku:'hoard',reason:''})).status,400,'grants need a reason');
- const grant=await staff.post('admin/store/grant',{owner:alice.id,sku:'hoard',reason:'Payment link #7'});assert.equal(grant.status,200);assert.equal(grant.body.diamonds,100);assert.equal(grant.body.balance,100);
- assert.ok(db.economy.supporter(alice.id));assert.equal(db.economy.snapshot(alice.id).history[0].reason,'Staff diamond grant');
+ const grant=await staff.post('admin/store/grant',{owner:alice.id,sku:'hoard',reason:'Payment link #7'});assert.equal(grant.status,200);assert.equal(grant.body.amount,100);assert.equal(grant.body.balance,100);
+ assert.ok(db.economy.supporter(alice.id));assert.equal(db.economy.snapshot(alice.id).history[0].reason,'Diamond pack grant');
+ const coinGrant=await staff.post('admin/store/grant',{owner:alice.id,sku:'vault',reason:'Stream giveaway'});assert.equal(coinGrant.body.asset,'coins');assert.equal(db.economy.snapshot(alice.id).wallet.coins,13050);
+ const coinBack=await staff.post('admin/store/refund',{id:coinGrant.body.id,reason:'Wrong winner'});assert.equal(coinBack.status,200);assert.equal(db.economy.snapshot(alice.id).wallet.coins,50,'coin clawbacks come out of the coin balance');assert.equal(db.economy.snapshot(alice.id).wallet.diamonds,100);
  const listing=await staff.get('admin/store');assert.equal(listing.body.purchases[0].note,'Payment link #7');assert.equal(listing.body.users.find(u=>u.id===alice.id).label,'Alice');
  const paid=await a.post('store/order',{sku:'handful',requestId:'req-00000030'});await a.post('store/capture',{id:paid.body.id});
  const refund=await staff.post('admin/store/refund',{id:paid.body.id,reason:'Player asked within an hour'});assert.equal(refund.status,200);assert.equal(refund.body.status,'refunded');
@@ -130,7 +135,26 @@ test('admins grant packs manually and refund through PayPal with audit rows; mem
  assert.equal(db.economy.snapshot(alice.id).wallet.diamonds,100);
  const taken=await staff.post('admin/store/refund',{id:grant.body.id,reason:'Duplicate grant'});assert.equal(taken.status,200);assert.equal(db.economy.snapshot(alice.id).wallet.diamonds,0);assert.equal(db.economy.supporter(alice.id),false);
  assert.equal((await staff.post('admin/store/refund',{id:grant.body.id,reason:'again'})).status,409);
- const actions=db.admin.auditList(admin.id).map(r=>r.action);assert.ok(actions.includes('store-grant')&&actions.filter(x=>x==='store-refund').length===2);
+ const actions=db.admin.auditList(admin.id).map(r=>r.action);assert.ok(actions.includes('store-grant')&&actions.filter(x=>x==='store-refund').length===3);
+}));
+
+test('coin packs can be gifted to an accepted friend: the friend gets the coins, both get the star, and refunds unwind both',()=>fixture(async({db,alice,bob,as,pp,webhook})=>{
+ const a=as(alice),b=as(bob);
+ assert.equal((await a.post('store/order',{sku:'purse',requestId:'req-00000050',recipient:bob.id})).status,403,'strangers cannot receive gifts');
+ const request=db.friends.act(alice.id,{action:'request',participantId:bob.id});db.friends.act(bob.id,{action:'accept',id:request.id});
+ assert.equal((await a.post('store/order',{sku:'handful',requestId:'req-00000051',recipient:bob.id})).status,400,'diamond packs are not giftable');
+ assert.equal((await a.post('store/order',{sku:'purse',requestId:'req-00000052',recipient:alice.id})).status,400,'a gift needs someone else');
+ const order=await a.post('store/order',{sku:'purse',requestId:'req-00000053',recipient:bob.id});assert.equal(order.status,200);
+ assert.equal((await a.post('store/order',{sku:'purse',requestId:'req-00000053'})).status,409,'the same request id cannot drop the recipient');
+ assert.match(pp.orders.get(order.body.order_id).unit.description,/gift/);
+ const receipt=await a.post('store/capture',{id:order.body.id});assert.equal(receipt.status,200);assert.equal(receipt.body.recipient,bob.id);assert.equal(receipt.body.balance,50,'the buyer\'s own coins are unchanged');
+ assert.equal(db.economy.snapshot(bob.id).wallet.coins,1050);assert.equal(db.economy.snapshot(bob.id).history[0].reason,'Coin pack gift received');
+ assert.ok(db.economy.supporter(alice.id)&&db.economy.supporter(bob.id),'both names light up');
+ const mine=(await a.get('store')).body.purchases,theirs=(await b.get('store')).body.purchases;
+ assert.equal(mine[0].recipient,bob.id);assert.equal(theirs[0].received,true);assert.equal(theirs[0].from,alice.id);
+ const o=pp.orders.get(order.body.order_id);assert.deepEqual((await webhook({id:'E-gift',event_type:'PAYMENT.CAPTURE.REFUNDED',resource:{id:o.captured.id,custom_id:o.unit.custom_id,amount:o.unit.amount}})).body,{ok:true,clawback:order.body.id});
+ assert.equal(db.economy.snapshot(bob.id).wallet.coins,50,'the refund comes out of the friend\'s wallet');assert.equal(db.economy.snapshot(alice.id).wallet.coins,50);
+ assert.equal(db.economy.supporter(alice.id),false);assert.equal(db.economy.supporter(bob.id),false,'both stars go out');
 }));
 
 test('the LiDollQuest wallet route exposes supporter_until so the game can draw the star',()=>fixture(async({db,alice,as,login})=>{

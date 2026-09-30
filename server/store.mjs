@@ -1,10 +1,15 @@
 import {randomUUID} from 'node:crypto';
 export const SUPPORTER_DAYS=30; // Every fulfilled pack grants this many days of the supporter star; repeat purchases extend the current window.
-export const DEFAULT_CATALOG=[ // Placeholder packs anchored to the 50-coin exchange; STORE_CATALOG in the environment replaces the whole list.
- {sku:'handful',name:'Handful of diamonds',diamonds:5,price_cents:199,currency:'USD'},
- {sku:'pouch',name:'Pouch of diamonds',diamonds:15,price_cents:499,currency:'USD'},
- {sku:'chest',name:'Chest of diamonds',diamonds:40,price_cents:999,currency:'USD'},
- {sku:'hoard',name:'Diamond hoard',diamonds:100,price_cents:1999,currency:'USD'},
+export const ASSETS=['diamonds','coins']; // The two wallet balances a pack may credit; stars are earned only.
+export const DEFAULT_CATALOG=[ // Placeholder packs; STORE_CATALOG in the environment replaces the whole list. Coins start at 1000 for $1.99 and get a bigger bonus per tier.
+ {sku:'handful',name:'Handful of diamonds',asset:'diamonds',amount:5,price_cents:199,currency:'USD'},
+ {sku:'pouch',name:'Pouch of diamonds',asset:'diamonds',amount:15,price_cents:499,currency:'USD'},
+ {sku:'chest',name:'Chest of diamonds',asset:'diamonds',amount:40,price_cents:999,currency:'USD'},
+ {sku:'hoard',name:'Diamond hoard',asset:'diamonds',amount:100,price_cents:1999,currency:'USD'},
+ {sku:'purse',name:'Purse of coins',asset:'coins',amount:1000,price_cents:199,currency:'USD'},
+ {sku:'satchel',name:'Satchel of coins',asset:'coins',amount:2750,price_cents:499,currency:'USD'},
+ {sku:'strongbox',name:'Strongbox of coins',asset:'coins',amount:6000,price_cents:999,currency:'USD'},
+ {sku:'vault',name:'Coin vault',asset:'coins',amount:13000,price_cents:1999,currency:'USD'},
 ];
 const fail=(status,message,code)=>{throw Object.assign(Error(message),{status,code});}; // Safe, actionable errors for the authenticated API.
 const CLAWBACK_EVENTS={'PAYMENT.CAPTURE.REFUNDED':'refunded','PAYMENT.CAPTURE.REVERSED':'refunded','PAYMENT.CAPTURE.DENIED':'failed','CUSTOMER.DISPUTE.CREATED':'disputed'}; // Webhook types that take diamonds back, and the status each leaves behind.
@@ -17,24 +22,27 @@ export function storeCatalog(source=process.env.STORE_CATALOG){ // Validate the 
  for(const p of list){
   if(typeof p?.sku!=='string'||!/^[a-z0-9_-]{1,32}$/.test(p.sku)||seen.has(p.sku))throw Error('Each STORE_CATALOG pack needs a unique lowercase sku.');seen.add(p.sku);
   if(typeof p.name!=='string'||!p.name.trim()||p.name.length>80)throw Error('Each STORE_CATALOG pack needs a name.');
-  if(!Number.isSafeInteger(p.diamonds)||p.diamonds<1||p.diamonds>100000)throw Error('Pack diamonds must be a whole number between 1 and 100000.');
+  if(!ASSETS.includes(p.asset))throw Error('Pack asset must be diamonds or coins.');
+  if(!Number.isSafeInteger(p.amount)||p.amount<1||p.amount>1000000)throw Error('Pack amount must be a whole number between 1 and 1000000.');
   if(!Number.isSafeInteger(p.price_cents)||p.price_cents<50||p.price_cents>100000)throw Error('Pack price_cents must be a whole number between 50 and 100000.');
   if(p.currency!==currency||!/^[A-Z]{3}$/.test(currency))throw Error('Every pack must share one three-letter currency code.');
  }
- return list.map(({sku,name,diamonds,price_cents,currency})=>({sku,name,diamonds,price_cents,currency}));
+ return list.map(({sku,name,asset,amount,price_cents,currency})=>({sku,name,asset,amount,price_cents,currency}));
 }
 
-export function createStore(db,{wallet,adjust,enabled=()=>true,paypal=null,catalog=DEFAULT_CATALOG,publicOrigin='',now=Date.now,log=console.warn}={}){ // Diamond pack purchases inside market.sqlite; PayPal is the only payment rail, staff grants are the manual fallback.
- db.exec(`CREATE TABLE IF NOT EXISTS store_purchases(id TEXT PRIMARY KEY,owner TEXT NOT NULL REFERENCES economy_wallets(owner),request_id TEXT,order_id TEXT UNIQUE,sku TEXT NOT NULL,diamonds INTEGER NOT NULL CHECK(diamonds>0),price_cents INTEGER NOT NULL CHECK(price_cents>=0),currency TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('pending','fulfilled','refunded','disputed','failed','cancelled')),capture_id TEXT,payer_id TEXT,clawback_short INTEGER NOT NULL DEFAULT 0,note TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+export function createStore(db,{wallet,adjust,enabled=()=>true,canGift=()=>false,paypal=null,catalog=DEFAULT_CATALOG,publicOrigin='',now=Date.now,log=console.warn}={}){ // canGift(buyer,recipient): the tracker answers with its friendship table. // Diamond pack purchases inside market.sqlite; PayPal is the only payment rail, staff grants are the manual fallback.
+ db.exec(`CREATE TABLE IF NOT EXISTS store_purchases(id TEXT PRIMARY KEY,owner TEXT NOT NULL REFERENCES economy_wallets(owner),recipient TEXT REFERENCES economy_wallets(owner),request_id TEXT,order_id TEXT UNIQUE,sku TEXT NOT NULL,asset TEXT NOT NULL CHECK(asset IN ('diamonds','coins')),amount INTEGER NOT NULL CHECK(amount>0),price_cents INTEGER NOT NULL CHECK(price_cents>=0),currency TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('pending','fulfilled','refunded','disputed','failed','cancelled')),capture_id TEXT,payer_id TEXT,clawback_short INTEGER NOT NULL DEFAULT 0,note TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS store_purchase_owner ON store_purchases(owner,created_at);
   CREATE UNIQUE INDEX IF NOT EXISTS store_purchase_request ON store_purchases(owner,request_id) WHERE request_id IS NOT NULL;
   CREATE INDEX IF NOT EXISTS store_purchase_capture ON store_purchases(capture_id);
+  CREATE INDEX IF NOT EXISTS store_purchase_recipient ON store_purchases(recipient,created_at);
   CREATE TABLE IF NOT EXISTS store_events(id TEXT PRIMARY KEY,type TEXT NOT NULL,purchase_id TEXT,received_at TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS store_supporters(owner TEXT PRIMARY KEY REFERENCES economy_wallets(owner),until INTEGER NOT NULL);`); // Idempotent: adds tables beside the existing wallet without changing the market schema version.
  const stamp=()=>new Date(now()).toISOString(); // Row timestamps follow the injectable clock so tests can move time.
  const pack=sku=>catalog.find(p=>p.sku===sku)??fail(400,'Choose a diamond pack.','unknown_sku');
  const row=id=>db.prepare('SELECT * FROM store_purchases WHERE id=?').get(id);
- const publicRow=r=>({id:r.id,sku:r.sku,diamonds:r.diamonds,price_cents:r.price_cents,currency:r.currency,status:r.status,created_at:r.created_at,updated_at:r.updated_at}); // Buyers never see payer ids or staff notes.
+ const publicRow=r=>({id:r.id,sku:r.sku,asset:r.asset,amount:r.amount,price_cents:r.price_cents,currency:r.currency,status:r.status,recipient:r.recipient??null,created_at:r.created_at,updated_at:r.updated_at}); // Buyers never see payer ids or staff notes.
+ const beneficiary=r=>r.recipient??r.owner; // A gift lands in the friend's wallet; everything else in the buyer's.
 
  function supporterUntil(owner){const until=db.prepare('SELECT until FROM store_supporters WHERE owner=?').get(owner)?.until??null;return until!==null&&until>now()?until:null;} // Expired windows read as absent; the row is harmless to keep.
  function extendSupporter(owner,days=SUPPORTER_DAYS){ // A new pack adds days to the current window rather than restarting it, so buying twice never wastes a day.
@@ -51,8 +59,8 @@ export function createStore(db,{wallet,adjust,enabled=()=>true,paypal=null,catal
    const r=row(id);if(!r)fail(404,'Unknown purchase.','unknown_purchase');
    if(r.status==='fulfilled'){db.exec('COMMIT');return receipt(r);} // A retry, or a webhook arriving after the capture, sees the finished row.
    if(r.status!=='pending')fail(409,'This purchase is '+r.status+'.','purchase_closed');
-   wallet(r.owner);adjust(r.owner,'diamonds',r.diamonds,'store:'+r.id,r.order_id?'Diamond pack purchase':'Staff diamond grant');
-   extendSupporter(r.owner);
+   wallet(r.owner);wallet(beneficiary(r));adjust(beneficiary(r),r.asset,r.amount,'store:'+r.id,r.recipient?'Coin pack gift received':(r.asset==='coins'?'Coin':'Diamond')+(r.order_id?' pack purchase':' pack grant')); // Ledger reason names the currency so the wallet history reads plainly.
+   extendSupporter(r.owner);if(r.recipient)extendSupporter(r.recipient); // A gift lights the star on both names.
    db.prepare("UPDATE store_purchases SET status='fulfilled',capture_id=COALESCE(?,capture_id),payer_id=COALESCE(?,payer_id),note=CASE WHEN ? IS NULL THEN note ELSE ? END,updated_at=? WHERE id=?").run(captureId,payerId,note??null,note??null,stamp(),id);
    db.exec('COMMIT');return receipt(row(id));
   }catch(error){db.exec('ROLLBACK');throw error;}
@@ -65,29 +73,36 @@ export function createStore(db,{wallet,adjust,enabled=()=>true,paypal=null,catal
     if(r.status==='pending')db.prepare('UPDATE store_purchases SET status=?,note=?,updated_at=? WHERE id=?').run(status,reason,stamp(),id);
     db.exec('COMMIT');return row(id);
    }
-   const have=wallet(r.owner).diamonds,debit=Math.min(have,r.diamonds),short=r.diamonds-debit;
-   if(debit>0)adjust(r.owner,'diamonds',-debit,'store-'+status+':'+r.id,status==='disputed'?'Diamond pack dispute':'Diamond pack refund');
-   shrinkSupporter(r.owner);
+   const have=wallet(beneficiary(r))[r.asset],debit=Math.min(have,r.amount),short=r.amount-debit;
+   if(debit>0)adjust(beneficiary(r),r.asset,-debit,'store-'+status+':'+r.id,(r.recipient?'Coin pack gift':(r.asset==='coins'?'Coin':'Diamond')+' pack')+(status==='disputed'?' dispute':' refund'));
+   shrinkSupporter(r.owner);if(r.recipient)shrinkSupporter(r.recipient); // Both stars lose the days that gift granted.
    db.prepare('UPDATE store_purchases SET status=?,clawback_short=?,note=?,updated_at=? WHERE id=?').run(status,short,reason,stamp(),id);
    db.exec('COMMIT');return row(id);
   }catch(error){db.exec('ROLLBACK');throw error;}
  }
- function receipt(r){return {...publicRow(r),balance:wallet(r.owner).diamonds,supporter_until:supporterUntil(r.owner)};} // What the buyer sees after a capture: the pack, their new balance and the star's end date.
+ function receipt(r){return {...publicRow(r),balance:wallet(r.owner)[r.asset],wallet:wallet(r.owner),supporter_until:supporterUntil(r.owner)};} // Always the buyer's own balance, even for a gift: the friend's wallet is theirs to see. // What the buyer sees after a capture: the pack, the new balance of that currency, the whole wallet and the star's end date.
 
  function view(owner){ // The storefront payload: nothing secret, and no purchase rows belonging to anyone else.
-  return {enabled:Boolean(paypal),environment:paypal?.environment??null,client_id:paypal?.clientId??null,currency:catalog[0].currency,catalog,purchases:db.prepare('SELECT * FROM store_purchases WHERE owner=? ORDER BY created_at DESC,id LIMIT 20').all(owner).map(publicRow),supporter_until:supporterUntil(owner)};
+  return {enabled:Boolean(paypal),environment:paypal?.environment??null,client_id:paypal?.clientId??null,currency:catalog[0].currency,catalog,purchases:db.prepare('SELECT * FROM store_purchases WHERE owner=? OR (recipient=? AND status<>\'pending\') ORDER BY created_at DESC,id LIMIT 20').all(owner,owner).map(r=>({...publicRow(r),...(r.owner!==owner?{received:true,from:r.owner}:{})})),supporter_until:supporterUntil(owner)}; // Gifts received show up too, once they have actually landed.
  }
  async function begin(owner,input){ // Create the PayPal order with OUR price; the browser only names the pack and its idempotency key.
   if(!paypal)fail(503,'The diamond store is not available right now.','store_disabled');
   if(!enabled(owner))fail(403,'This account cannot make purchases.','account_disabled');
   if(!input||typeof input.requestId!=='string'||!/^[A-Za-z0-9_-]{8,80}$/.test(input.requestId))fail(400,'Supply a unique request ID.','invalid_request');
   const existing=db.prepare('SELECT * FROM store_purchases WHERE owner=? AND request_id=?').get(owner,input.requestId);
-  if(existing){if(existing.sku!==input.sku)fail(409,'This request ID already started a different purchase.','request_reused');return {id:existing.id,order_id:existing.order_id,status:existing.status};} // A double click returns the same order instead of opening two.
+  const recipient=typeof input.recipient==='string'&&input.recipient?input.recipient:null;
+  if(existing){if(existing.sku!==input.sku||(existing.recipient??null)!==recipient)fail(409,'This request ID already started a different purchase.','request_reused');return {id:existing.id,order_id:existing.order_id,status:existing.status};} // A double click returns the same order instead of opening two.
   const p=pack(input.sku),id=randomUUID(),at=stamp();wallet(owner);
+  if(recipient){ // Gifts: coin packs only, to an accepted friend who can still receive.
+   if(p.asset!=='coins')fail(400,'Only coin packs can be sent as gifts.','gift_not_coins');
+   if(recipient===owner)fail(400,'Choose a friend to receive the gift.','gift_self');
+   if(!canGift(owner,recipient)||!enabled(recipient))fail(403,'You can only gift coins to an accepted friend.','gift_not_friend');
+   wallet(recipient);
+  }
   if(db.prepare("SELECT COUNT(*) AS n FROM store_purchases WHERE owner=? AND status='pending' AND created_at>?").get(owner,new Date(now()-3600000).toISOString()).n>=10)fail(429,'Finish or cancel your open purchases first.','too_many_pending'); // Abandoned checkouts cannot pile up PayPal orders.
-  db.prepare("INSERT INTO store_purchases(id,owner,request_id,sku,diamonds,price_cents,currency,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'pending',?,?)").run(id,owner,input.requestId,p.sku,p.diamonds,p.price_cents,p.currency,at,at);
+  db.prepare("INSERT INTO store_purchases(id,owner,recipient,request_id,sku,asset,amount,price_cents,currency,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,'pending',?,?)").run(id,owner,recipient,input.requestId,p.sku,p.asset,p.amount,p.price_cents,p.currency,at,at);
   try{
-   const order=await paypal.createOrder({purchaseId:id,amountCents:p.price_cents,currency:p.currency,description:p.name+' for LiDollQuest ('+p.diamonds+' diamonds)',returnUrl:publicOrigin+'/tracker/#stickers',cancelUrl:publicOrigin+'/tracker/#stickers'});
+   const order=await paypal.createOrder({purchaseId:id,amountCents:p.price_cents,currency:p.currency,description:p.name+' for LiDollQuest ('+p.amount+' '+p.asset+(recipient?', gift':'')+')',returnUrl:publicOrigin+'/tracker/#stickers',cancelUrl:publicOrigin+'/tracker/#stickers'});
    db.prepare('UPDATE store_purchases SET order_id=?,updated_at=? WHERE id=?').run(order.id,stamp(),id);
    return {id,order_id:order.id,status:'pending'};
   }catch(error){db.prepare("UPDATE store_purchases SET status='failed',note=?,updated_at=? WHERE id=?").run('PayPal order creation failed.',stamp(),id);throw error;} // The row keeps the failure for staff; the buyer can simply try again.
@@ -124,7 +139,7 @@ export function createStore(db,{wallet,adjust,enabled=()=>true,paypal=null,catal
   if(!enabled(owner))fail(404,'That account is not available.','account_disabled');
   const p=pack(input?.sku),reason=typeof input?.reason==='string'?input.reason.trim().slice(0,500):'';if(!reason)fail(400,'Give a reason for the grant.','reason_required');
   const id=randomUUID(),at=stamp();wallet(owner);
-  db.prepare("INSERT INTO store_purchases(id,owner,sku,diamonds,price_cents,currency,status,note,created_at,updated_at) VALUES (?,?,?,?,0,?,'pending',?,?,?)").run(id,owner,p.sku,p.diamonds,p.currency,reason,at,at);
+  db.prepare("INSERT INTO store_purchases(id,owner,sku,asset,amount,price_cents,currency,status,note,created_at,updated_at) VALUES (?,?,?,?,?,0,?,'pending',?,?,?)").run(id,owner,p.sku,p.asset,p.amount,p.currency,reason,at,at);
   return fulfil(id,{note:reason});
  }
  async function refund(input){ // Staff refund: PayPal first, then the clawback; a grant with no capture is clawed back directly.

@@ -50,6 +50,7 @@ const files = new Map([
   ['lib/reward-celebration.js', 'text/javascript; charset=utf-8'],
   ['lib/notifications.js', 'text/javascript; charset=utf-8'],
   ['lib/economy.js', 'text/javascript; charset=utf-8'], ['lib/store.js', 'text/javascript; charset=utf-8'],
+  ['store/index.html','text/html; charset=utf-8'], ['store/style.css','text/css; charset=utf-8'],
   ['admin/store.js','text/javascript; charset=utf-8'],
   ['lib/reminder.js', 'text/javascript; charset=utf-8'],
   ['lib/theme.js', 'text/javascript; charset=utf-8'], ['theme-init.js', 'text/javascript; charset=utf-8'], ['themes.css', 'text/css; charset=utf-8'],
@@ -76,9 +77,9 @@ const csp = paypal.enabled
 export const server = http.createServer(requestBoundary(async (request, response) => { // Serves only the public allowlist, never source tools, backups, or project documentation.
   response.setHeader('X-Content-Type-Options', 'nosniff');
   response.setHeader('Referrer-Policy', 'no-referrer');
-  response.setHeader('Content-Security-Policy', csp);
-  response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   const pathname = new URL(request.url, 'http://localhost').pathname;
+  response.setHeader('Content-Security-Policy', pathname === `${base}store/` || pathname === `${base}store/index.html` ? csp.replace("frame-ancestors 'none'", "frame-ancestors 'self'") : csp); // Only the standalone store page may be framed, and only by this origin (the game homepage lives on it).
+  response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   if (games(request, response, pathname)) return;
   if (pathname.startsWith(`${base}auth/`)) return login.route(request, response, pathname.slice(`${base}auth/`.length));
   if (pathname.startsWith(`${base}api/`)) return api(request, response, pathname.slice(`${base}api/`.length));
@@ -89,10 +90,11 @@ export const server = http.createServer(requestBoundary(async (request, response
   }
   if (!pathname.startsWith(base)) { response.writeHead(404); return response.end('Not found'); }
   if (pathname === `${base}coins`) {response.writeHead(308,{Location:`${base}coins/`});return response.end();}
+  if (pathname === `${base}store`) {response.writeHead(308,{Location:`${base}store/`});return response.end();}
   if (pathname === `${base}companion`) {response.writeHead(308,{Location:`${base}companion/`});return response.end();}
   if (pathname === `${base}admin`) { response.writeHead(308, { Location: `${base}admin/` }); return response.end(); }
   if ([`${base}potty_chart`, `${base}potty_chart/`, `${base}potty_chart/index.html`].includes(pathname)) { response.writeHead(308, { Location: `${base}#potty-chart` }); return response.end(); } // Old chart bookmarks now open the integrated view.
-  const filename = pathname.slice(base.length) === 'coins/' ? 'coins/index.html' : pathname.slice(base.length) === 'companion/' ? 'companion/index.html' : pathname.slice(base.length) === 'admin/' ? 'admin/index.html' : pathname.slice(base.length) === 'potty_chart/' ? 'potty_chart/index.html' : pathname.slice(base.length) || 'index.html';
+  const filename = pathname.slice(base.length) === 'coins/' ? 'coins/index.html' : pathname.slice(base.length) === 'store/' ? 'store/index.html' : pathname.slice(base.length) === 'companion/' ? 'companion/index.html' : pathname.slice(base.length) === 'admin/' ? 'admin/index.html' : pathname.slice(base.length) === 'potty_chart/' ? 'potty_chart/index.html' : pathname.slice(base.length) || 'index.html';
   if (!files.has(filename)) { response.writeHead(404); return response.end('Not found'); }
   try {
     const assetPath = stickerPaths.get(filename) ?? filename;

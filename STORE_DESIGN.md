@@ -1,6 +1,6 @@
 # Diamond store (PayPal Checkout) — design
 
-Players buy **diamond packs** on the Little Log website with PayPal. The tracker owns the wallet, so the store lives in the tracker (`server/store.mjs`) and credits diamonds through the same atomic market ledger every other reward uses. Coins are not sold directly: the existing one-way exchange (1 diamond = 50 LiDollCoins) turns bought diamonds into coins, which keeps a single price anchor and rules out arbitrage between two catalogues.
+Players buy **diamond packs and LiDollCoin packs** on the Little Log website with PayPal. The tracker owns the wallet, so the store lives in the tracker (`server/store.mjs`) and credits either balance through the same atomic market ledger every other reward uses. Each pack names its `asset` (`diamonds` or `coins`) and `amount`; stars are never sold. Coin packs are priced far below the 50-coin diamond exchange on purpose (Doll: "2 dollars from a thousand and go from there"), so buying diamonds to exchange for coins is never the better deal; diamonds are bought for the things only diamonds do.
 
 Every fulfilled purchase also grants **30 days of supporter status**: a small star beside the buyer's name in Little Log (posts, comments, friends, profile) and in LiDollQuest online rooms (peer labels and the player's own HUD). Buying again while the star is active extends it by another 30 days from the current end.
 
@@ -61,7 +61,8 @@ store_purchases(
   owner TEXT NOT NULL REFERENCES economy_wallets(owner),
   request_id TEXT,                -- browser idempotency key (unique per owner)
   order_id TEXT UNIQUE,           -- PayPal order id (NULL for staff grants)
-  sku TEXT NOT NULL, diamonds INTEGER NOT NULL, price_cents INTEGER NOT NULL, currency TEXT NOT NULL,
+  sku TEXT NOT NULL, asset TEXT NOT NULL,   -- 'diamonds' | 'coins'
+  amount INTEGER NOT NULL, price_cents INTEGER NOT NULL, currency TEXT NOT NULL,
   status TEXT NOT NULL CHECK(status IN ('pending','fulfilled','refunded','disputed','failed','cancelled')),
   capture_id TEXT, payer_id TEXT, clawback_short INTEGER NOT NULL DEFAULT 0,
   note TEXT NOT NULL DEFAULT '',  -- staff-visible reason for manual grants/refunds
@@ -70,18 +71,22 @@ store_events(id TEXT PRIMARY KEY, type TEXT NOT NULL, purchase_id TEXT, received
 store_supporters(owner TEXT PRIMARY KEY REFERENCES economy_wallets(owner), until INTEGER NOT NULL)      -- epoch ms
 ```
 
-Ledger reasons: `Diamond pack purchase`, `Diamond pack refund`, `Diamond pack dispute`, `Staff diamond grant`.
+Ledger reasons: `Diamond pack purchase` / `Coin pack purchase`, `… pack refund`, `… pack dispute`, `… pack grant`.
 
 ## Catalogue
 
-Defaults live in `server/store.mjs` (`DEFAULT_CATALOG`) and can be replaced with the `STORE_CATALOG` environment variable (JSON array of `{sku, name, diamonds, price_cents, currency}`). Prices are whole cents; the currency is a single ISO code for the whole catalogue.
+Defaults live in `server/store.mjs` (`DEFAULT_CATALOG`) and can be replaced with the `STORE_CATALOG` environment variable (JSON array of `{sku, name, asset, amount, price_cents, currency}`). Prices are whole cents; the currency is a single ISO code for the whole catalogue.
 
-| SKU | Diamonds | Price (USD) |
-| --- | --- | --- |
-| handful | 5 | 1.99 |
-| pouch | 15 | 4.99 |
-| chest | 40 | 9.99 |
-| hoard | 100 | 19.99 |
+| SKU | Asset | Amount | Price (USD) |
+| --- | --- | --- | --- |
+| handful | diamonds | 5 | 1.99 |
+| pouch | diamonds | 15 | 4.99 |
+| chest | diamonds | 40 | 9.99 |
+| hoard | diamonds | 100 | 19.99 |
+| purse | coins | 1,000 | 1.99 |
+| satchel | coins | 2,750 | 4.99 |
+| strongbox | coins | 6,000 | 9.99 |
+| vault | coins | 13,000 | 19.99 |
 
 Doll sets the final numbers; these are placeholders anchored to the 50-coin exchange.
 
@@ -91,7 +96,7 @@ Session + CSRF protected, same-origin, under `api/`:
 
 - `GET store` → `{participant, csrf, enabled, environment, client_id, currency, catalog, purchases, supporter_until}`.
 - `POST store/order` `{sku, requestId}` → `{id, order_id, status}`. `requestId` is the browser's idempotency key so a double click cannot open two PayPal orders; the SDK's `createOrder` returns `order_id`.
-- `POST store/capture` `{id}` → `{id, status, diamonds, balance, supporter_until}`. Idempotent.
+- `POST store/capture` `{id}` → `{id, status, asset, amount, balance, wallet, supporter_until}`. `balance` is the credited currency's new total; `wallet` is all three. Idempotent.
 
 No session (PayPal calls it), registered before the origin/session checks in `server/api.mjs`:
 
@@ -104,6 +109,14 @@ Admin (`requireAdmin`, audited):
 - `POST admin/store/refund` `{id, reason}` → PayPal refund of the capture, then clawback.
 
 External wallet route `GET lidollcoin/v1/wallet?client_id=lidollquest` gains `supporter_until` so the quest server can show the star.
+
+## Gifts
+
+A coin pack (never a diamond pack) can be sent to an **accepted friend**: `POST store/order` takes an optional `recipient` participant id, checked through the tracker's friendship table (`canGift`) and the recipient's account state. The row keeps `recipient`; fulfilment credits the friend's coins with the ledger reason `Coin pack gift received` and extends **both** supporter windows by 30 days. The buyer's receipt shows their own unchanged balance; the friend sees the gift in their purchase list as `received` with `from`. A refund or dispute takes the coins back out of the friend's wallet (never below zero) and removes 30 days from both stars.
+
+## Standalone store page and modals
+
+`store/index.html` is the same Buy diamonds card on its own page (`lib/store.js` in standalone mode: API base `../api/`, always live, sign-in link `auth/login?returnTo=store` that opens in a new tab and re-checks the session on focus). It is served with `frame-ancestors 'self'` instead of `'none'` so the game homepage on the same origin can open it inside its Donate ♥ modal; every other tracker page keeps `'none'`. After a successful capture `lib/store.js` opens a `<dialog>` (built on demand, class `store-success`) showing the pack, the new balance and the star's end date, on both the Stickers page and the standalone page.
 
 ## Supporter star
 

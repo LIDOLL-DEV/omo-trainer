@@ -252,11 +252,13 @@ export function openDatabase(filename = databasePath(), options = {}) { // Opens
   const admin = createAdminStore(db, records, growthChart,{onRecordWrite:(owner,entry)=>social.syncRecordPost(owner,entry.id,entry)}); // Imported corrections update existing summaries without publishing historical records.
   const sessions=createSessions(db,admin,options.sessions); // Persistent device sessions retain live access checks and server-side revocation.
   const catalog = options.stickerCatalog ?? stickerCatalog(); // Read sticker assets once; the market and social sticker display share it.
-  const economy = createRewardBridge(db, filename, {...options, stickerCatalog: catalog}); // Queue rewards here; all balances and market trades live in market.sqlite.
+  let friendsForGifts = null; // Assigned once friends exist below; the store's canGift asks it lazily, so creation order does not matter.
+  const economy = createRewardBridge(db, filename, {...options, stickerCatalog: catalog, store: {...(options.store ?? {}), canGift: (buyer, recipient) => Boolean(friendsForGifts?.accepted(buyer, recipient))}}); // Queue rewards here; all balances and market trades live in market.sqlite.
   const stickerTypes = new Map(catalog.map(type => [type.id, {id: type.id, name: type.name, url: type.url}])); // Public sticker details shown on comments and messages.
   for (const {alias, canonical} of options.stickerDuplicates ?? STICKER_DUPLICATES) if (stickerTypes.has(canonical)) stickerTypes.set(alias, stickerTypes.get(canonical)); // Merged duplicate IDs display the surviving design.
   const stickerInfo = id => stickerTypes.get(id) ?? {id, name: 'Sticker', url: null}; // Retired assets still show a labelled placeholder.
   const friends=createFriends(db,recordFromRow,{avatarInfo:id=>social.avatarInfo(id),presenceInfo:(owner,target)=>gamePresence.read(owner,target),onRemove:(a,b)=>{notifications.community.restrictPair(a,b);activity.prune(a);activity.prune(b);}});
+  friendsForGifts=friends; // Coin gifts may only go to accepted friends.
   const questSocial=createQuestSocial(db,friends,{presence:(owner,input)=>gamePresence.act(owner,input)});
   const activity=createActivity(db,{now:options.now,canSee:row=>social.activityVisible(row)});
   const gamePresence=createGamePresence(db,friends,{now:options.now,activity}); // The tracker remains the authority for the friend audience and notification preferences.

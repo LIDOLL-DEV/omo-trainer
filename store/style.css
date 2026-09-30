@@ -1,0 +1,6 @@
+/* Standalone diamond store page: compact enough to sit inside the homepage's Donate modal iframe, readable on its own. */
+.store-page { max-width:720px; margin:auto; padding:20px 20px 32px; min-height:100vh; }
+.store-page h1 { font-size:30px; margin:0 0 6px; }
+.store-page .card { margin:16px 0; padding:20px; }
+.store-page [hidden] { display:none; }
+.store-page .button { display:inline-block; margin-top:8px; }
