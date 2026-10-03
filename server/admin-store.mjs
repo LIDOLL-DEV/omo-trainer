@@ -95,6 +95,22 @@ export function createAdminStore(db, records, growthChart,{onRecordWrite=()=>{}}
       db.exec('COMMIT'); return {ok:true};
     } catch(error) { db.exec('ROLLBACK'); throw error; }
   }
+  function passwordResetTarget(actor,id) { // Resolve the immutable identity before any call to the identity service.
+    requireAdmin(actor);
+    if(typeof id!=='string') throw new ApiError(400,'Choose a user.');
+    if(id===actor) throw new ApiError(400,'You cannot reset your own password here. Ask another administrator, or use the identity service command line.');
+    const row=db.prepare('SELECT id,label,issuer,subject FROM participants WHERE id=?').get(id);
+    if(!row) throw new ApiError(404,'Participant not found.');
+    return row;
+  }
+  function passwordResetDone(actor,id) { // The identity service already revoked sign-ins; also end Little Log sessions now instead of at the next status check.
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.prepare('DELETE FROM app_sessions WHERE participant_id=?').run(id);
+      audit(actor,'reset-password',id); // The new password is never written to the audit trail.
+      db.exec('COMMIT');
+    } catch(error) { db.exec('ROLLBACK'); throw error; }
+  }
   function dataset(actor,participantId='') { // Return complete current records and chart definitions for the requested cohort, with no passwords or role import fields.
     requireAdmin(actor);
     const selected=users(actor).filter(user=>!participantId || user.id===participantId);
@@ -168,6 +184,6 @@ export function createAdminStore(db, records, growthChart,{onRecordWrite=()=>{}}
       db.exec('COMMIT'); return result.summary;
     } catch(error) { db.exec('ROLLBACK'); throw error; }
   }
-  return {access,requireAdmin,isGamemaster,bootstrap,reminder,saveReminder,users,updateUser,dataset,charts,previewImport,importData,audit, // audit is exported so store grants/refunds leave the same attributable trail.
+  return {access,requireAdmin,isGamemaster,bootstrap,reminder,saveReminder,users,updateUser,passwordResetTarget,passwordResetDone,dataset,charts,previewImport,importData,audit, // audit is exported so store grants/refunds leave the same attributable trail.
     auditList(actor) { requireAdmin(actor); return db.prepare('SELECT * FROM admin_audit ORDER BY created_at DESC,rowid DESC LIMIT 100').all(); }};
 }

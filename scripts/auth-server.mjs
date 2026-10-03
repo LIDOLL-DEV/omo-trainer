@@ -6,9 +6,11 @@ import Provider from 'oidc-provider';
 import { openAuthStore, AccountInputError } from '../auth/store.mjs';
 import { loadAuthConfig } from '../auth/config.mjs';
 import { authPage } from '../auth/views.mjs';
+import { ADMIN_RESET_PATH, adminToken, createAdminReset } from '../auth/admin-reset.mjs';
 
 const config = loadAuthConfig();
 const store = openAuthStore();
+const adminReset = createAdminReset(store, adminToken()); // Off unless AUTH_ADMIN_TOKEN is set; reached only over the private network.
 const secure = config.issuer.startsWith('https:');
 export const provider = new Provider(config.issuer, {
   clients: config.clients.map(client=>({...client,scope:client.scope??['openid','profile',...(client.client_id==='lidollbot'?walletScopes:client.client_id==='lidollquest'?[...walletScopes,...questScopes]:[])].join(' ')})),
@@ -58,6 +60,7 @@ export const authServer = http.createServer(requestBoundary(async (request, resp
       response.writeHead(200,{'Content-Type':'application/json'});return response.end(JSON.stringify({kid:key.kid,payload,signature:sign('RSA-SHA256',Buffer.from(payload),createPrivateKey({key,format:'jwk'})).toString('base64url')}));
     }catch {response.writeHead(400);return response.end('Invalid status request.');}
   } // Signed nonce responses let applications enforce revocations without sharing identity secrets.
+  if(path===ADMIN_RESET_PATH)return adminReset(request,response);
   if(path==='/register'||path==='/register/') { // A shareable entry point starts fresh PKCE/state cookies through the registered Little Log client.
     response.setHeader('Cache-Control','no-store');
     response.setHeader('Referrer-Policy','no-referrer');

@@ -114,11 +114,25 @@ node scripts/auth-admin.mjs disable alice
 node scripts/auth-admin.mjs backup backups/auth-2026-09-11
 ```
 
+### Resetting a password from the Little Log admin console
+
+Administrators can also reset a password from **Admin console > User management > Reset password**. The identity service generates a new random password (same strength as `reset-password`). The admin sees it once, with a copy button, and passes it to the user privately. Little Log never stores it, and the audit log records only who reset whose password and when. The reset signs the user out of every app: LiD0llID sessions are deleted, the security version advances, and their Little Log sessions are revoked immediately. Admins can't reset their own password here; another admin or the command line has to do it.
+
+This is off until both services share a secret:
+
+1. Generate one: `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`.
+2. In `/etc/lidoll/auth.env`, set `AUTH_ADMIN_TOKEN=<secret>`.
+3. In `/etc/lidoll/tracker.env`, set `AUTH_ADMIN_TOKEN=<same secret>` and `AUTH_ADMIN_URL=http://10.1.1.23:4180/admin/reset-password` (the private address, like `LIDOLLCOIN_IDENTITY_URL`).
+4. Add `location = /admin/reset-password { return 404; }` to the public auth server block (already in `deploy/nginx-auth*.conf`) and reload nginx.
+5. Restart `lidoll-auth`, then the tracker.
+
+The endpoint stays private in three ways: nginx hides it; the identity service rejects any request that arrives through the proxy (it carries `X-Forwarded-For`/`X-Real-IP`); and the tracker only calls an HTTPS URL or plain HTTP on loopback/private-LAN addresses. Requests need the bearer secret and are limited to 30 per 15 minutes. Without these settings the **Reset password** button doesn't appear, and the CLI keeps working as before.
+
 The auth directory contains `auth.sqlite`, persistent signing/cookie keys in `secrets.json`, and registered apps in `clients.json`. The backup command captures the live SQLite database using its backup API and includes both configuration files in a new directory. Keep that directory private. To restore, stop the auth service, restore the complete matching backup into its auth data directory, retain the public issuer, and restart. A restored old backup may restore old sessions; plan account/session revocation accordingly.
 
 Passwords use salted scrypt. Login attempts are limited per username and source IP, with counters stored in SQLite. The provider persists sessions, authorization grants, tokens, code consumption, and expiry. PKCE, callback validation, state, nonce, and signed ID tokens are handled through the OIDC libraries.
 
-This release supports self-registration and administrator-provisioned username/password accounts. Password resets remain administrator-managed; email delivery/recovery, MFA/passkeys, and an identity-service web admin console are not implemented. Shared identity-service login sessions last up to seven days. Little Log keeps its own persistent device session for 30 days, renewed during authenticated app use, with a maximum of 180 days from sign-in before a fresh login is required. Browser/PWA restarts and tracker service restarts preserve that session when cookies and the data directory are retained.
+This release supports self-registration and administrator-provisioned username/password accounts. Password resets remain administrator-managed, through the CLI or the Little Log admin console; email delivery/self-service recovery, MFA/passkeys, and an identity-service web admin console are not implemented. Shared identity-service login sessions last up to seven days. Little Log keeps its own persistent device session for 30 days, renewed during authenticated app use, with a maximum of 180 days from sign-in before a fresh login is required. Browser/PWA restarts and tracker service restarts preserve that session when cookies and the data directory are retained.
 
 The app cookie remains host-only, HttpOnly, SameSite=Lax and Secure on HTTPS. Session credentials are stored as digests in SQLite; passwords, access tokens and session secrets are never saved in JavaScript localStorage. Renewal writes the server expiry at most daily (plus the final capped renewal); the browser's Max-Age matches the remaining server lifetime. Short-lived OIDC access tokens do not shorten the independent device session. Cookie expiry is renewed only through authenticated browser routes; device statistics/report/wallet bearer calls do not renew a browser login.
 

@@ -17,6 +17,8 @@ The Hold-result roll cooldown is fifteen minutes. The protocol unit/browser test
 
 ## Admin statistics API and CrowPanel
 
+`npm test` includes `tests/password-reset.test.mjs`. It covers reset by stable account ID (old password rejected, security version advanced, OIDC sessions deleted, disabled accounts left disabled) and the identity endpoint's defenses: off without `AUTH_ADMIN_TOKEN`, hidden when proxy headers are present, bearer check, rate limit. It also checks the tracker client's private-URL and response validation, and the admin route: admin-only, CSRF, no self-reset, target sign-out, and an audit entry without the password. `node tests/password-reset-browser.mjs` drives the real console with a stub identity endpoint: confirm and cancel, one-time display, Done clearing the password, own-row lockout and mobile layout.
+
 `npm test` includes `tests/statistics.test.mjs`: admin-only token creation/use, self/all scopes, demotion/disabling/revocation, digest-only persistence, HTTP/CSRF boundaries, bounded dates, participant pagination, overview versus individual counts, cumulative intake, chart stars and deleted records. `node tests/statistics-browser.mjs` verifies token setup, literal device labels, both views, revocation/hiding, mobile layout and authorization cleanup using synthetic data.
 
 The companion `F:\Langley\Documents\Arduino\lidoll-logger\ps\build.ps1` compiles against esp32 3.3.10, LovyanGFX 1.2.26 and ArduinoJson 7.4.3. Its README lists physical display/touch/reconnection checks; compilation does not verify board operation. See [STATISTICS_API.md](STATISTICS_API.md).

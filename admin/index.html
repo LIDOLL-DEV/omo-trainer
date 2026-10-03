@@ -133,7 +133,8 @@
       </section>
       <section data-panel="users" aria-labelledby="users-title" hidden>
         <h2 id="users-title" tabindex="-1">User management</h2>
-        <p class="section-copy">Manage Little Log access for accounts that have signed in. Disabling access revokes Little Log sessions and blocks new ones. LiD0llID passwords and access to other apps are managed separately. At least one enabled administrator must remain.</p>
+        <p class="section-copy">Manage Little Log access for accounts that have signed in. Disabling access revokes Little Log sessions and blocks new ones. At least one enabled administrator must remain. <strong>Reset password</strong> gives the user a new random LiD0llID password and signs them out of every app; you see the new password once and pass it on privately. Access to other apps is managed separately.</p>
+        <section id="password-reset-result" class="card" role="status" aria-live="polite" hidden><h3 id="password-reset-title">New password</h3><p id="password-reset-summary" class="section-copy"></p><p><code id="password-reset-value" class="password-reset-value"></code></p><div class="admin-buttons"><button class="button primary small" id="password-reset-copy" type="button">Copy password</button><button class="button secondary small" id="password-reset-done" type="button">Done — hide it</button></div><p class="field-help">This password is not saved anywhere in Little Log and cannot be shown again. If you lose it, reset the password again.</p></section>
         <label for="user-search">Find a user</label><input id="user-search" type="search" placeholder="Username or participant ID">
         <div id="user-table" class="table-scroll card"></div>
       </section>

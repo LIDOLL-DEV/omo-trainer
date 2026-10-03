@@ -12,7 +12,7 @@ const $=selector=>document.querySelector(selector);
 const escape=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); // Escape user-authored labels before creating HTML or SVG.
 const colors=['#ff96c8','#b3a4f4','#ffe66f','#7fd9c7','#88bfff']; // Five distinct keys cover every action category.
 const fmt=value=>typeof value==='number'?Number(value.toFixed(2)).toLocaleString():String(value??'');
-let csrf='',actor=null,users=[],dataset=null,analysis=null,preview=null,recordLimit=100,loading=false,accessEpoch=0;
+let csrf='',actor=null,users=[],dataset=null,analysis=null,preview=null,recordLimit=100,loading=false,accessEpoch=0,passwordResetAvailable=false;
 const pottyGraphIds=new Set(['stars','row-stars','refusals','reveal']);
 let predictionRequest=0,predictionUser='',predictionEntries=null,predictionBusy=false;
 let chartUserId='',chartWeek='',chartRequest=0,chartRefreshing=false;
@@ -29,6 +29,7 @@ const participants=()=>dataset.users.filter(user=>user.records.some(record=>reco
 const cohort=()=>({...dataset,users:participants().filter(user=>!selectedId() || user.id===selectedId())});
 
 function clearPrivateView() { // Drop all in-memory cohort data and rendered records when authorization ends; never persist administrator datasets in browser storage.
+  hidePasswordReset(); passwordResetAvailable=false;
   resetPrediction();
   notificationComposer.clear();
   analysisPanel.clear();
@@ -217,7 +218,7 @@ function renderRecords() {
 function renderUsers() { // User controls refer only to immutable participant IDs, including when usernames collide across issuers.
   const search=$('#user-search').value.trim().toLowerCase();
   const selected=users.filter(user=>(user.label+' '+user.id).toLowerCase().includes(search));
-  $('#user-table').innerHTML='<table><thead><tr><th>User</th><th>Records / chart</th><th>Role</th><th>Access</th><th>Actions</th></tr></thead><tbody>'+selected.map(user=>'<tr data-user="'+escape(user.id)+'"><td>'+escape(user.label)+(user.id===actor?.id?' (you)':'')+'<br><small>'+escape(user.id)+'</small><details><summary>Verified identity</summary><p>'+escape(user.issuer)+'<br>'+escape(user.subject)+'</p></details></td><td>'+user.recordCount+' records<br>'+(user.hasChart?'Chart linked':'No chart')+'</td><td><select data-role aria-label="Role for '+escape(user.label)+'"><option value="participant"'+(user.role==='participant'?' selected':'')+'>Participant</option><option value="gamemaster"'+(user.role==='gamemaster'?' selected':'')+'>Gamemaster</option><option value="admin"'+(user.role==='admin'?' selected':'')+'>Admin</option></select></td><td><select data-disabled aria-label="Access for '+escape(user.label)+'"><option value="false"'+(!user.disabled?' selected':'')+'>Enabled</option><option value="true"'+(user.disabled?' selected':'')+'>Disabled</option></select></td><td><div class="admin-buttons"><button class="button primary small" data-save-user="'+escape(user.id)+'">Save access</button><button class="button secondary small" data-revoke="'+escape(user.id)+'">Revoke sessions</button><button class="button secondary small" data-inspect="'+escape(user.id)+'"'+(user.recordCount?'':' disabled')+'>View data</button><button class="button secondary small" data-prediction="'+escape(user.id)+'"'+(user.recordCount?'':' disabled')+'>Prediction</button></div></td></tr>').join('')+'</tbody></table>';
+  $('#user-table').innerHTML='<table><thead><tr><th>User</th><th>Records / chart</th><th>Role</th><th>Access</th><th>Actions</th></tr></thead><tbody>'+selected.map(user=>'<tr data-user="'+escape(user.id)+'"><td>'+escape(user.label)+(user.id===actor?.id?' (you)':'')+'<br><small>'+escape(user.id)+'</small><details><summary>Verified identity</summary><p>'+escape(user.issuer)+'<br>'+escape(user.subject)+'</p></details></td><td>'+user.recordCount+' records<br>'+(user.hasChart?'Chart linked':'No chart')+'</td><td><select data-role aria-label="Role for '+escape(user.label)+'"><option value="participant"'+(user.role==='participant'?' selected':'')+'>Participant</option><option value="gamemaster"'+(user.role==='gamemaster'?' selected':'')+'>Gamemaster</option><option value="admin"'+(user.role==='admin'?' selected':'')+'>Admin</option></select></td><td><select data-disabled aria-label="Access for '+escape(user.label)+'"><option value="false"'+(!user.disabled?' selected':'')+'>Enabled</option><option value="true"'+(user.disabled?' selected':'')+'>Disabled</option></select></td><td><div class="admin-buttons"><button class="button primary small" data-save-user="'+escape(user.id)+'">Save access</button><button class="button secondary small" data-revoke="'+escape(user.id)+'">Revoke sessions</button><button class="button secondary small" data-inspect="'+escape(user.id)+'"'+(user.recordCount?'':' disabled')+'>View data</button><button class="button secondary small" data-prediction="'+escape(user.id)+'"'+(user.recordCount?'':' disabled')+'>Prediction</button>'+(passwordResetAvailable?'<button class="button secondary small" data-reset-password="'+escape(user.id)+'"'+(user.id===actor?.id?' disabled title="Ask another administrator to reset your own password"':'')+'>Reset password</button>':'')+'</div></td></tr>').join('')+'</tbody></table>';
 }
 async function renderAudit() {
   const result=await request('audit');
@@ -274,7 +275,7 @@ async function refresh() { // Fetch shared records only after a successful serve
   chartRequest++; $('#potty-detail').removeAttribute('aria-busy');
   loading=true; status('Loading administrator data…'); resetPreview();
   try {
-    const session=await request('users'); csrf=session.csrf; actor=session.participant; users=session.users;
+    const session=await request('users'); csrf=session.csrf; actor=session.participant; users=session.users; passwordResetAvailable=session.passwordReset===true;
     const selected=selectedId();
     dataset=await request('data');
     $('#participant-filter').innerHTML='<option value="">Everyone</option>'+participants().map(user=>'<option value="'+escape(user.id)+'">'+escape(user.label+' / '+user.id.slice(0,8))+'</option>').join('');
@@ -330,8 +331,9 @@ for(const format of ['json','csv']) $('#export-'+format).addEventListener('click
 });
 $('#user-table').addEventListener('click',async event=>{
   const button=event.target.closest('button'); if(!button) return;
-  const id=button.dataset.saveUser??button.dataset.revoke??button.dataset.inspect??button.dataset.prediction,user=users.find(value=>value.id===id);
+  const id=button.dataset.saveUser??button.dataset.revoke??button.dataset.inspect??button.dataset.prediction??button.dataset.resetPassword,user=users.find(value=>value.id===id);
   if(!user) return;
+  if(button.dataset.resetPassword) { void resetPassword(user,button); return; }
   if(button.dataset.prediction) { $('#participant-filter').value=id;resetPreview();resetPrediction();renderAnalytics();if(location.hash==='#predictions')void loadPrediction();else location.hash='predictions';return; }
   if(button.dataset.inspect) { $('#participant-filter').value=id; resetPreview();renderAnalytics();location.hash='analytics';return; }
   const row=button.closest('tr'),action=button.dataset.revoke?'revoke':'update';
@@ -341,6 +343,25 @@ $('#user-table').addEventListener('click',async event=>{
   try { await request('user',input); await refresh(); if(actor) status('User access updated. Existing Little Log sessions were revoked.'); }
   catch(error) { status(error.message); } finally {button.disabled=false;}
 });
+function hidePasswordReset() { // Remove the one-time password from the page as soon as it is no longer needed.
+  $('#password-reset-value').textContent=''; $('#password-reset-summary').textContent=''; $('#password-reset-result').hidden=true;
+}
+async function resetPassword(user,button) { // The server generates the password; the console shows it once and never stores it.
+  if(!confirm('Reset the LiD0llID password for '+user.label+'?\n\nThey will be signed out of Little Log and every connected app, and their current password will stop working. You will see the new password once.')) return;
+  hidePasswordReset(); button.disabled=true; status('Resetting password for '+user.label+'…');
+  try {
+    const result=await request('password-reset',{id:user.id});
+    $('#password-reset-summary').textContent='New password for '+result.label+' (LiD0llID username '+result.username+'). They have been signed out everywhere.'+(result.disabled?' Their LiD0llID account is disabled, so this password will not work until it is re-enabled.':'');
+    $('#password-reset-value').textContent=result.password; $('#password-reset-result').hidden=false; $('#password-reset-copy').textContent='Copy password';
+    status('Password reset for '+result.label+'. Share the new password privately.');
+    $('#password-reset-title').scrollIntoView({block:'nearest'});
+  } catch(error) { status(error.message); } finally { button.disabled=false; }
+}
+$('#password-reset-copy').addEventListener('click',async()=>{
+  try { await navigator.clipboard.writeText($('#password-reset-value').textContent); $('#password-reset-copy').textContent='Copied'; }
+  catch { status('Copy failed. Select the password and copy it manually.'); }
+});
+$('#password-reset-done').addEventListener('click',hidePasswordReset);
 $('#admin-workspace').addEventListener('click',event=>{
   const button=event.target.closest('button'); if(!button || !analysis) return;
   const id=button.dataset.svg??button.dataset.graphCsv,graph=analysis.graphs.find(value=>value.id===id); if(!graph) return;

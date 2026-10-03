@@ -44,13 +44,28 @@ export function openAuthStore(directory = authDirectory()) { // Keeps the shared
     else {
       const account = db.prepare('SELECT id FROM accounts WHERE username=?').get(username);
       if (!account) throw new Error('Account not found.');
-      db.exec('BEGIN IMMEDIATE');
-      try {
-        db.prepare('UPDATE accounts SET salt=?,hash=?,security_version=security_version+1 WHERE id=?').run(salt, digest, account.id);
-        db.prepare("DELETE FROM oidc WHERE json_extract(payload,'$.accountId')=?").run(account.id);
-        db.exec('COMMIT');
-      } catch(error) {db.exec('ROLLBACK');throw error;} // Commit the new password and revocation together, including after a process interruption.
+      replacePassword(account.id, salt, digest);
     }
+  }
+
+  function replacePassword(id, salt, digest) { // Commit the new password and revocation together, including after a process interruption.
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const row = db.prepare('UPDATE accounts SET salt=?,hash=?,security_version=security_version+1 WHERE id=? RETURNING username,disabled').get(salt, digest, id);
+      if (!row) throw new Error('Account not found.');
+      db.prepare("DELETE FROM oidc WHERE json_extract(payload,'$.accountId')=?").run(id);
+      db.exec('COMMIT');
+      return { username: row.username, disabled: Boolean(row.disabled) };
+    } catch(error) {db.exec('ROLLBACK');throw error;}
+  }
+
+  async function resetPasswordById(id) { // Administrator back-channel resets address the stable OIDC subject, never a mutable username.
+    if (typeof id !== 'string' || !db.prepare('SELECT 1 FROM accounts WHERE id=?').get(id)) return null;
+    const password = randomBytes(24).toString('base64url'); // Same strength as the CLI reset; the caller shows it once and never stores it.
+    const salt = randomBytes(32).toString('base64url');
+    const digest = (await passwordHash(password, salt)).toString('base64url');
+    try { return { ...replacePassword(id, salt, digest), password }; }
+    catch (error) { if (error.message === 'Account not found.') return null; throw error; }
   }
 
   async function verify(username, password) { // Performs the same KDF for unknown usernames to reduce account-enumeration timing differences.
@@ -80,7 +95,7 @@ export function openAuthStore(directory = authDirectory()) { // Keeps the shared
   }
 
   return {
-    Adapter, rateLimit, setPassword, verify,
+    Adapter, rateLimit, setPassword, resetPasswordById, verify,
     account: id => db.prepare('SELECT id,username,security_version FROM accounts WHERE id=? AND disabled=0').get(id),
     security: id => {const row=db.prepare('SELECT security_version,disabled FROM accounts WHERE id=?').get(id);return {version:row?.security_version??0,disabled:!row||Boolean(row.disabled)};}, // Expose no username or password data through status checks.
     list: () => db.prepare('SELECT id,username,disabled,created_at FROM accounts ORDER BY created_at').all(),

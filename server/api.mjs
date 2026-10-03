@@ -3,6 +3,7 @@ import {coinApi} from './coin-api.mjs';
 import { ApiError } from './database.mjs';
 import {reportApi} from './ai-report-access.mjs';
 import {statisticsApi} from './statistics.mjs';
+import {createPasswordReset} from './password-reset.mjs';
 
 function send(response, status, body) { // Keeps every authenticated response out of browser, proxy, and service-worker caches.
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', Vary: 'Cookie' });
@@ -30,7 +31,7 @@ async function body(request, limit = 256 * 1024) { // Bounds uploads before pars
   catch { throw new ApiError(400, 'Invalid JSON.'); }
 }
 
-export function createApi(database, login) { // Resolves each app session to an OIDC identity and isolates all data by that identity.
+export function createApi(database, login, {passwordReset=createPasswordReset()}={}) { // Resolves each app session to an OIDC identity and isolates all data by that identity.
   return async (request, response, route) => {
     try {
       if(route.startsWith('statistics/v1/'))return statisticsApi(database,login,request,response,route.slice('statistics/v1/'.length));
@@ -128,7 +129,13 @@ export function createApi(database, login) { // Resolves each app session to an 
         if (route === 'admin/store' && request.method === 'GET') return send(response, 200, { purchases: database.economy.store('list'), catalog: database.economy.store('catalog'), users: database.admin.users(participant.id).map(u => ({ id: u.id, label: u.label })) }); // Owner labels let staff read the purchase list without a second lookup.
         if (route === 'admin/store/grant' && request.method === 'POST') { const input = await body(request, 4096); const result = database.economy.store('grant', input?.owner, input); database.admin.audit(participant.id, 'store-grant', String(input?.owner ?? ''), { sku: input?.sku, reason: input?.reason, purchase: result.id }); return send(response, 200, result); } // Manual fulfilment (payment links, keys, goodwill) is audited like every other admin action.
         if (route === 'admin/store/refund' && request.method === 'POST') { const input = await body(request, 4096); const result = await database.economy.store('refund', input); database.admin.audit(participant.id, 'store-refund', result.owner, { purchase: result.id, reason: input?.reason }); return send(response, 200, result); } // PayPal refund first, then the diamond clawback.
-        if (route === 'admin/users' && request.method === 'GET') return send(response, 200, { users: database.admin.users(participant.id), csrf, participant });
+        if (route === 'admin/users' && request.method === 'GET') return send(response, 200, { users: database.admin.users(participant.id), csrf, participant, passwordReset: passwordReset.configured });
+        if (route === 'admin/password-reset' && request.method === 'POST') { // Shown once to the administrator; the tracker keeps no copy.
+          const target = database.admin.passwordResetTarget(participant.id, (await body(request, 4096))?.id);
+          const result = await passwordReset.reset(target);
+          database.admin.passwordResetDone(participant.id, target.id);
+          return send(response, 200, { id: target.id, label: target.label, ...result });
+        }
         if (route === 'admin/charts' && request.method === 'GET') return send(response, 200, database.admin.charts(participant.id));
         if (route === 'admin/data' && request.method === 'GET') return send(response, 200, database.admin.dataset(participant.id, scope));
         if (route === 'admin/audit' && request.method === 'GET') return send(response, 200, { audit: database.admin.auditList(participant.id) });
