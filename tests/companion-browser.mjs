@@ -30,6 +30,7 @@ const counts=page=>page.$$eval('#inventory-tabs .companion-tab-count',nodes=>nod
 const rows=page=>page.$$eval('#inventory tbody tr td:first-child',cells=>cells.map(cell=>cell.textContent));
 const descriptionReceipts=new Map();let loseDescriptionResponse=false;
 let actionHandler=null; // Set by the item card section: answers zones/action like the game server would.
+let actionError=null,readError=null; // Exercise rejected writes and failed refreshes against the real UI.
 const selected=page=>page.$eval('#inventory-tabs [aria-selected="true"]',node=>node.id);
 
 try{
@@ -40,6 +41,8 @@ try{
   page.on('request',request=>{
     const url=request.url();
     if(url.includes('/api/lidollcoin/browser/session'))return void request.respond({status:200,contentType:'application/json',body:JSON.stringify({linked:true,csrf:'test-csrf'})});
+    const failure=url.includes('/api/lidollcoin/browser/zones/action')?actionError:url.includes('/api/lidollcoin/browser/zones')?readError:null;
+    if(failure)return void request.respond({status:failure.status,contentType:'application/json',body:JSON.stringify({error:'fixture_error',error_description:failure.message})}); // Ordinary errors must leave the character readable.
     if(url.includes('/api/lidollcoin/browser/characters/action')){
       const input=JSON.parse(request.postData());assert.equal(request.headers()['x-csrf-token'],'test-csrf');assert.equal(input.action,'description');assert.equal(input.character_id,'char-1');
       let result=descriptionReceipts.get(input.request_id);
@@ -165,9 +168,32 @@ try{
   await page.screenshot({path:resolve(directory,'item-card-after-drink.png')});
   await page.click('#item-dialog-close');await page.waitForFunction(()=>!document.querySelector('#item-dialog').open);
   assert.match(await page.$eval('#status',n=>n.textContent),/Used Milk Bottle/);
+  // Another game action between polls makes this revision stale; a refused click must never empty the page.
+  const waitReady=()=>page.waitForFunction(()=>!document.querySelector('#reload').disabled);
+  const expectVisible=async()=>{assert.equal(await page.$eval('#content',n=>n.hidden),false);assert.equal(await page.$eval('#character-name',n=>n.textContent),'Tabs Tester');assert.deepEqual(await rows(page),['Milk Bottle','Rusty dagger']);};
+  snapshot.character.revision=5;snapshot.sheet.equipment_version='v3';
+  actionError={status:409,message:'Character changed; refresh before choosing another action.'};
+  await page.click('#inventory tbody tr:nth-child(2) td:last-child button');await waitReady();
+  await expectVisible();assert.match(await page.$eval('#status',n=>n.textContent),/Character changed/);
+  assert.equal(sent.length,1,'a conflict refresh never replays the refused action');
+  actionError=null;actionHandler=input=>{sent.push(input);return snapshot;};
+  await page.click('#inventory tbody tr:first-child td:last-child button');await waitReady();
+  assert.equal(sent.at(-1).revision,5,'the next explicit action uses the refreshed revision');assert.equal(sent.at(-1).equipment_version,'v3');
+  for(const failure of [{status:409,message:'This item cannot be removed.'},{status:503,message:'The service is temporarily unavailable.'}]){
+    actionError=failure;readError={status:503,message:'Refresh is temporarily unavailable.'};
+    await page.click('#inventory tbody tr:first-child td:last-child button');await waitReady();await expectVisible();
+    assert.ok((await page.$eval('#status',n=>n.textContent)).includes(failure.message));
+  } // A failed recovery read preserves the last successful view and original action error.
+  actionError=null;
+  await page.click('#reload');await waitReady();await expectVisible();assert.match(await page.$eval('#status',n=>n.textContent),/Refresh is temporarily unavailable/);
+  readError=null;
   snapshot.sheet.equipmentEditable=false;await page.click('#reload');await page.waitForFunction(()=>document.querySelector('#inventory tbody tr:first-child td:last-child button')?.disabled===true);
   assert.equal(await page.$eval('#inventory tbody tr:first-child td:last-child button',n=>n.disabled),true,'Drink locks with equipment during combat or a pending turn');
   actionHandler=null;snapshot.sheet.inventory=inventory;delete snapshot.capabilities;
+
+  readError={status:403,message:'Connection revoked.'};await page.click('#reload');await waitReady();
+  assert.equal(await page.$eval('#content',n=>n.hidden),true);assert.equal(await page.$eval('#link',n=>n.hidden),false);
+  assert.equal(await page.$eval('#sheet',n=>n.childElementCount),0,'revoked connections still clear private character details');
 
   assert.deepEqual(errors,[],'the companion page must raise no script errors');
   console.log('companion category tabs and item card verified; screenshots in '+directory);

@@ -6,6 +6,12 @@ saved per character. Refreshes preserve drafts; conflicting device edits are sho
 for review. Deploy with the quest service's `description` action support. The game
 client update displays descriptions in inspection and captured RP paperdoll previews.
 `tests/companion-browser.mjs` checks saving, clearing, conflicts and retry behavior.
+Failed equipment, food and bank actions keep the last loaded character visible.
+A conflict refreshes the character before the player chooses another action; it
+never repeats the refused action automatically. Temporary refresh failures keep
+the sheet readable, while an expired or revoked connection clears private details.
+Deploy `companion/app.js` and reload the companion to receive this fix; no database
+migration or game editor update is required.
 
 Administrator device statistics: [STATISTICS_API.md](STATISTICS_API.md) documents the read-only API, revocable admin tokens, everyone overview and individual drilldown, plus the CrowPanel Advance 7-inch V1.4 companion setup.
 

@@ -51,7 +51,18 @@ async function run(work){ // One request at a time, so a sale and a page change 
   try{await work();}
   catch(error){
     if([401,403].includes(error.status))unlinked('Your LiDollQuest connection ended. Connect again to view your character.');
-    else {closeItemDialog();$('#status').textContent=error.message;clearSheet();bank=null;snapshot=null;renderBank();} // Close the item card so the message behind it is readable.
+    else {
+      closeItemDialog(); // Keep the last successful character visible when an action or background refresh fails.
+      let message=error.message;
+      if(error.status===409&&snapshot){
+        try{await load();if(!snapshot&&!$('#link').hidden)return;} // Refresh conflict tokens without retrying the action; preserve any unlink message.
+        catch(refreshError){
+          if([401,403].includes(refreshError.status)){unlinked('Your LiDollQuest connection ended. Connect again to view your character.');return;}
+          message+=' Refresh could not finish; showing the last loaded character.';
+        }
+      }
+      $('#status').textContent=message; // Initial loads, actions and polling failures all remain readable.
+    }
   }finally{busy=false;controls();}
 }
 function clearSheet(){

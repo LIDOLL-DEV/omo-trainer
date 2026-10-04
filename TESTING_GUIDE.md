@@ -23,6 +23,20 @@ The Hold-result roll cooldown is fifteen minutes. The protocol unit/browser test
 
 The companion `F:\Langley\Documents\Arduino\lidoll-logger\ps\build.ps1` compiles against esp32 3.3.10, LovyanGFX 1.2.26 and ArduinoJson 7.4.3. Its README lists physical display/touch/reconnection checks; compilation does not verify board operation. See [STATISTICS_API.md](STATISTICS_API.md).
 
+## Companion action failures
+
+`node tests/companion-browser.mjs` (with `PUPPETEER_MODULE` and `CHROME_PATH`)
+reproduces a rejected Equip action after the game advances the character revision.
+It checks that the sheet and inventory remain visible, the next explicit Drink
+uses refreshed revision/equipment tokens, and no action is automatically repeated.
+It also covers rejected food actions, failed conflict recovery, an unavailable
+manual refresh, and private-data cleanup after revocation. The existing shop and
+guild browser runners cover bank sales, withdrawals, wear-now and guild actions.
+
+For a manual check, leave the companion open while changing equipment in the game,
+then use Equip or Eat/Drink in the companion. If the state changed between reads,
+the conflict should leave the character visible and refresh it for the next click.
+
 ## Automated regression tests
 
 ```sh
