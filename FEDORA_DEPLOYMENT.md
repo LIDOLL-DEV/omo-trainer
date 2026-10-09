@@ -64,6 +64,34 @@ sudo systemctl reload nginx
 
 Fedora documents this [SELinux network-connect boolean](https://fedoraproject.org/wiki/Infrastructure/Mirroring/ProxyMirror). Apply it only on the reverse-proxy machine when needed. The service-server installer restores normal SELinux file labels with restorecon and leaves policy enforcement enabled.
 
+### Compress game snapshots (outbound bandwidth)
+
+A crowded LiDollQuest poll is about 70 KiB of JSON, sent about twice a second per
+player, so roughly 1.1 Mbit/s per player goes out over the internet. The proxy's
+`nginx.conf` already has `gzip on`, but no `gzip_types`, so nginx only compresses
+`text/html` and JSON goes out uncompressed. [nginx-quest-gzip.conf](deploy/nginx-quest-gzip.conf)
+compresses only the four zone routes (desktop and browser, polls and commands),
+which makes them about 8× smaller. It leaves every other route and site alone. The
+file's comments explain why it uses exact-match locations, and why compressing
+these routes is safe.
+
+On the reverse proxy (10.1.1.20):
+
+```bash
+sudo cp nginx-quest-gzip.conf nginx-quest-gzip-settings.conf /etc/nginx/snippets/
+# Inside the lidoll.dev HTTPS server block, next to the nginx-gallery.conf include, add:
+#    include /etc/nginx/snippets/nginx-quest-gzip.conf;
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+To check it worked, open the browser build's DevTools Network tab. A `zones` request
+should show `content-encoding: gzip`, with "transferred" far smaller than "size". To
+undo it, remove the include line and reload.
+
+Before a desktop release: browsers always ask for gzip, but the native GameMaker
+client is untested. If it doesn't ask, it still gets plain JSON, so nothing breaks,
+but desktop players won't get the 8× saving.
+
 Local deployment health checks verify both systemd processes run from the selected release, the tracker API responds correctly, and auth discovery advertises the expected issuer. They do not validate public DNS, TLS certificates, or external proxy reachability; verify a real sign-in through your public domain after setup.
 
 The scripts assume the complete app is served through the Node proxy. If you use the optional static frontend hosting configuration, publishing frontend assets to the separate web server remains an additional step; this updater does not copy files to an unconfigured remote host.
