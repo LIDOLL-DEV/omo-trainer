@@ -1,5 +1,7 @@
 # Little Log
 
+LiDollQuest large characters (2026-10-12): both coin API gateways allow 768 KiB request bodies for zones/action so the game service can accept 512 KiB saved loadouts with room for command metadata. Cloud/action remains 256 KiB and wallet actions remain 8 KiB. Zones responses retain their 1 MiB bound. Release the gateways before the matching service and game client; production deployment is separate. Validate with `node --test tests/coin-browser-body.test.mjs tests/coin-browser-api.test.mjs tests/coin-api.test.mjs`.
+
 The LiDollQuest companion lets players edit a public character description on their
 character card (the companion shows no game artwork: no paperdoll and no tush art). Edits are free, allow paragraphs and 2,000 characters, and remain
 saved per character. Refreshes preserve drafts; conflicting device edits are shown

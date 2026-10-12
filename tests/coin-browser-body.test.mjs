@@ -39,13 +39,16 @@ test('browser gameplay accepts bounded loadouts without widening wallet access',
     assert.equal((await post(body)).status,200);
     assert.deepEqual(received[0],{url:'/zones/action',authorization:'Bearer test-wallet',body:command});
   });
-  await t.test('256 KiB boundary is accepted and one byte more is rejected',async()=>{
-    const exact=JSON.stringify({payload:'x'.repeat(256*1024-14)});
-    assert.equal(Buffer.byteLength(exact),256*1024);
+  await t.test('768 KiB gameplay boundary is accepted and one byte more is rejected',async()=>{
+    const exact=JSON.stringify({payload:'x'.repeat(768*1024-14)});
+    assert.equal(Buffer.byteLength(exact),768*1024);
     assert.equal((await post(exact)).status,200);
     const count=received.length;
     assert.equal((await post(exact+' ')).status,413);
     assert.equal(received.length,count);
+  });
+  await t.test('cloud chunks retain their 256 KiB limit',async()=>{
+    const count=received.length;assert.equal((await post(JSON.stringify({payload:'x'.repeat(256*1024)}),'cloud/action')).status,413);assert.equal(received.length,count);
   });
   await t.test('wallet operations retain their 8 KiB limit',async()=>{
     const count=received.length;

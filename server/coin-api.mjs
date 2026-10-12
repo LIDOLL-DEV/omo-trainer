@@ -14,7 +14,7 @@ export async function coinApi(database,login,request,response,route) { // Bearer
     let input;
     if(request.method==='POST') {
       const chunks=[];let size=0;
-      for await(const chunk of request){size+=chunk.length;if(size>(['zones/action','cloud/action'].includes(route)?262144:8192))throw Object.assign(Error('Request too large.'),{status:413});chunks.push(chunk);}
+      for await(const chunk of request){size+=chunk.length;if(size>(route==='zones/action'?768*1024:route==='cloud/action'?256*1024:8192))throw Object.assign(Error('Request too large.'),{status:413});chunks.push(chunk);}
       const text=Buffer.concat(chunks).toString('utf8'),type=request.headers['content-type']??'';
       if(type.startsWith('application/json')){try{input=JSON.parse(text);}catch{throw Object.assign(Error('Invalid JSON.'),{status:400});}}
       else if(type.startsWith('application/x-www-form-urlencoded')&&['device','token'].includes(route))input=Object.fromEntries(new URLSearchParams(text));

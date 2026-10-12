@@ -33,7 +33,7 @@ export async function coinBrowserApi(database,login,request,response,route) { //
     if(request.method==='POST') {
       if(origin!==login.origin)fail(403,'This request must come from the game website.');
       let size=0;const chunks=[];
-      for await(const chunk of request){size+=chunk.length;if(size>(['zones/action','cloud/action'].includes(route)?256*1024:8192))fail(413,'Request too large.');chunks.push(chunk);} // Save chunks fit the gameplay bound without raising ordinary wallet limits.
+      for await(const chunk of request){size+=chunk.length;if(size>(route==='zones/action'?768*1024:route==='cloud/action'?256*1024:8192))fail(413,'Request too large.');chunks.push(chunk);} // Save chunks fit the gameplay bound without raising ordinary wallet limits.
       const text=Buffer.concat(chunks).toString('utf8'),type=request.headers['content-type']??'';
       if(route==='connect'&&type.startsWith('application/x-www-form-urlencoded'))input=Object.fromEntries(new URLSearchParams(text));
       else if(type.startsWith('application/json')){try{input=JSON.parse(text);}catch{fail(400,'Invalid JSON.');}}
